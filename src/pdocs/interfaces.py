@@ -1,0 +1,27 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Protocol
+
+
+class SecretStore(Protocol):
+    def get(self, service: str, account: str) -> str: ...
+
+    def set(self, service: str, account: str, value: str) -> None: ...
+
+
+class Cipher(Protocol):
+    def seal(self, source: Path, destination: Path) -> None: ...
+
+    def unseal(self, source: Path, destination: Path) -> None: ...
+
+
+@dataclass(frozen=True)
+class SourceCandidate:
+    reference: str
+    thread_reference: str | None
+    received_at: str
+    sender: str
+    subject: str
+    has_attachments: bool

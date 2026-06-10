@@ -1,0 +1,38 @@
+version = 1
+
+[paths]
+vault = "~/Documents/Personal Documents Vault"
+inbox = "~/Documents/Personal Documents Inbox"
+readable = "~/Documents/Personal Documents"
+state = "~/.local/state/pdocs"
+
+[security]
+cipher = "gpg-symmetric"
+keychain_service = "pdocs"
+repository_key_account = "repository-encryption"
+gpg_binary = "gpg"
+
+[gmail]
+enabled = true
+account = "you@example.com"
+oauth_client = "~/.config/pdocs/google-oauth-client.json"
+token_service = "pdocs-google-oauth"
+scan_queries = [
+  "newer_than:30d -category:promotions -category:social",
+]
+
+[workflow]
+commit_after_import = true
+push_after_commit = true
+build_readable_view = true
+require_approval_for = ["delete-record", "change-owner"]
+
+[taxonomy]
+domains = [
+  "identity-residence",
+  "education",
+  "employment",
+  "household",
+  "finance-insurance",
+  "legal-cases",
+]

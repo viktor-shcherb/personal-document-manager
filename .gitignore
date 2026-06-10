@@ -1,0 +1,20 @@
+.DS_Store
+.idea/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+
+# OAuth material and deployment-specific configuration
+credentials.json
+token.json
+config/profile.toml
+
+# Plaintext intake and generated views must not live in this repository
+inbox/
+readable/

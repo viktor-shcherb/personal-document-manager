@@ -1,0 +1,4 @@
+interface:
+  display_name: "Manage Personal Documents"
+  short_description: "Review, version, and organize personal records"
+  default_prompt: "Use $manage-personal-documents to review new records and maintain my encrypted personal document repository."
