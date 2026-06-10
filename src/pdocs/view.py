@@ -50,6 +50,10 @@ def build_view(vault: Path, readable: Path, cipher: Cipher) -> int:
                     temporary / "content" / filename,
                     record_dir / filename,
                 )
+                (record_dir / "metadata.json").write_text(
+                    json.dumps(metadata, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
                 index.append(metadata)
 
         (staging / "INDEX.json").write_text(
@@ -78,6 +82,17 @@ def build_view_from_head(vault: Path, readable: Path, cipher: Cipher) -> int:
         archive_path = temporary / "head.tar"
         snapshot = temporary / "snapshot"
         snapshot.mkdir()
+        records = subprocess.run(
+            ["git", "ls-tree", "--name-only", "HEAD", "--", "records"],
+            cwd=vault,
+            text=True,
+            capture_output=True,
+        )
+        if records.returncode:
+            detail = records.stderr.strip()
+            raise ViewError(f"Unable to read vault HEAD: {detail}")
+        if not records.stdout.strip():
+            return build_view(snapshot, readable, cipher)
         with archive_path.open("wb") as archive:
             result = subprocess.run(
                 ["git", "archive", "--format=tar", "HEAD", "records"],

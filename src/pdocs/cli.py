@@ -12,6 +12,7 @@ from pathlib import Path
 from .backup import GoogleDriveBackupAuth, install_backup_workflow
 from .config import AppConfig, load_config, repository_secret_locator
 from .crypto import GpgSymmetricCipher
+from .folder_exchange import export_view_to_folder, resolve_views_folder
 from .gmail import GmailSource
 from .keychain import MacOSKeychain
 from .records import (
@@ -22,6 +23,15 @@ from .records import (
     record_path,
 )
 from .state import ReviewState
+from .source_ledger import SourceLedger, source_key
+from .source_runs import (
+    folder_profile,
+    folder_source_identity,
+    gmail_profile,
+    gmail_source_identity,
+    run_folder_source,
+    run_gmail_source,
+)
 from .view import build_view_from_head
 
 
@@ -39,6 +49,27 @@ def _print_candidates(candidates) -> None:
             f"{candidate.reference}\t{candidate.received_at}\t"
             f"{candidate.sender}\t{candidate.subject}{attachment}"
         )
+
+
+def _print_source_run(result) -> None:
+    print(f"source key: {result.source_key}")
+    print(f"run: {result.run_id}")
+    if result.query:
+        print(f"query: {result.query}")
+    print(f"items seen: {result.items_seen}")
+    print(f"items exported: {result.items_exported}")
+    print(f"duplicates skipped: {result.items_skipped_duplicate}")
+    if result.batch:
+        print(f"inbox batch: {result.batch}")
+    print(f"encrypted ledger event: {result.ledger_event}")
+    print("next: review the inbox batch, import selected records, then commit")
+    print("      records/ and .pdocs/state/source-ledger/")
+
+
+def _paths_overlap(left: Path, right: Path) -> bool:
+    left = left.resolve()
+    right = right.resolve()
+    return left == right or left in right.parents or right in left.parents
 
 
 def _validate_record_input(config: AppConfig, args) -> None:
@@ -87,10 +118,27 @@ def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
     path_items = list(configured_paths.items())
     for index, (left_name, left) in enumerate(path_items):
         for right_name, right in path_items[index + 1 :]:
-            if left == right or left in right.parents or right in left.parents:
+            if _paths_overlap(left, right):
                 errors.append(
                     f"{left_name} and {right_name} paths must be separate and non-nested"
                 )
+    for name, profile in config.sources.folder.items():
+        external_paths = {
+            "inbox": profile.inbox_path(),
+            "views": profile.views_path(),
+        }
+        if _paths_overlap(external_paths["inbox"], external_paths["views"]):
+            errors.append(
+                f"folder source {name!r} inbox and views must be separate "
+                "and non-nested"
+            )
+        for role, external in external_paths.items():
+            for local_role, local in configured_paths.items():
+                if _paths_overlap(external, local):
+                    errors.append(
+                        f"folder source {name!r} {role} must not overlap "
+                        f"the configured {local_role} path"
+                    )
     if not shutil.which(config.security.gpg_binary):
         errors.append(f"GnuPG binary not found: {config.security.gpg_binary}")
     locator = repository_secret_locator(config)
@@ -194,6 +242,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add.add_argument("--source-ref", help="Source message or artifact reference.")
     add.add_argument("--thread-ref", help="Source thread reference.")
+    add.add_argument("--source-profile", help="Configured source profile name.")
+    add.add_argument("--source-key", help="Stable source ledger key.")
     add.add_argument("--notes", help="Short factual context.")
     list_command = record_commands.add_parser(
         "list",
@@ -224,6 +274,146 @@ def build_parser() -> argparse.ArgumentParser:
     view_commands.add_parser(
         "build",
         help="Replace the readable view with records from Git HEAD.",
+    )
+    view_export = view_commands.add_parser(
+        "export",
+        help="Export the committed readable view to an external transport.",
+    )
+    view_export_commands = view_export.add_subparsers(
+        dest="view_export_command",
+        required=True,
+    )
+    view_export_folder = view_export_commands.add_parser(
+        "folder",
+        help="Export the committed readable view to a local folder transport.",
+    )
+    view_export_folder.add_argument(
+        "--profile",
+        default="default",
+        help="Configured folder source profile.",
+    )
+    view_export_folder.add_argument(
+        "--folder",
+        type=Path,
+        help="Explicit destination path instead of the profile's views folder.",
+    )
+    view_export_folder.add_argument(
+        "--prune",
+        action="store_true",
+        help="Delete stale files previously managed by PDM.",
+    )
+
+    source_parser = commands.add_parser(
+        "source",
+        help="Run recurring sources using the encrypted shared ledger.",
+    )
+    source_commands = source_parser.add_subparsers(
+        dest="source_command",
+        required=True,
+    )
+    source_run = source_commands.add_parser(
+        "run",
+        help="Run a configured source and append a successful ledger event.",
+    )
+    source_run_commands = source_run.add_subparsers(
+        dest="source_run_kind",
+        required=True,
+    )
+    source_email = source_run_commands.add_parser(
+        "email",
+        aliases=["gmail"],
+        help="Run an incremental Gmail source profile.",
+    )
+    source_email.add_argument(
+        "--profile",
+        default="default",
+        help="Configured Gmail source profile.",
+    )
+    email_window = source_email.add_mutually_exclusive_group()
+    email_window.add_argument(
+        "--full",
+        action="store_true",
+        help="Scan all matching history while retaining exact deduplication.",
+    )
+    email_window.add_argument(
+        "--since",
+        help="Override the start with YYYY-MM-DD or an ISO 8601 timestamp.",
+    )
+    source_email.add_argument(
+        "--overlap",
+        help="Override this run's overlap duration, such as 48h.",
+    )
+    source_email.add_argument(
+        "--limit",
+        type=int,
+        default=100,
+        help="Maximum Gmail messages to inspect.",
+    )
+    source_folder = source_run_commands.add_parser(
+        "folder",
+        help="Run a ledger-backed local folder source.",
+    )
+    source_folder.add_argument(
+        "--profile",
+        default="default",
+        help="Configured folder source profile.",
+    )
+    source_folder.add_argument(
+        "--folder",
+        type=Path,
+        help="Explicit source path instead of the profile's inbox folder.",
+    )
+    source_folder.add_argument(
+        "--full",
+        action="store_true",
+        help="Rescan all files while retaining exact content deduplication.",
+    )
+
+    source_state = source_commands.add_parser(
+        "state",
+        help="Inspect or manage effective state replayed from the ledger.",
+    )
+    source_state_commands = source_state.add_subparsers(
+        dest="source_state_command",
+        required=True,
+    )
+    source_state_commands.add_parser("list")
+    source_state_show = source_state_commands.add_parser("show")
+    source_state_show.add_argument("kind", choices=["email", "gmail", "folder"])
+    source_state_show.add_argument("--profile", default="default")
+    source_state_show.add_argument("--folder", type=Path)
+    source_state_reset = source_state_commands.add_parser("reset")
+    source_state_reset.add_argument("kind", choices=["email", "gmail", "folder"])
+    source_state_reset.add_argument("--profile", default="default")
+    source_state_reset.add_argument("--folder", type=Path)
+    source_state_commands.add_parser("rebuild")
+
+    ingest_parser = commands.add_parser(
+        "ingest",
+        help="Stage documents from external transports for review.",
+    )
+    ingest_commands = ingest_parser.add_subparsers(
+        dest="ingest_command",
+        required=True,
+    )
+    ingest_folder = ingest_commands.add_parser(
+        "folder",
+        help="Stage new files through a ledger-backed folder source.",
+    )
+    ingest_folder.add_argument(
+        "--profile",
+        default="default",
+        help="Configured folder source profile.",
+    )
+    ingest_folder.add_argument(
+        "--folder",
+        type=Path,
+        help="Explicit source path instead of the profile's inbox folder.",
+    )
+    ingest_folder.add_argument(
+        "--full",
+        action="store_true",
+        help="Rescan all files while retaining exact content deduplication.",
     )
 
     gmail_parser = commands.add_parser(
@@ -317,6 +507,8 @@ def main() -> None:
                     source_kind=args.source_kind,
                     source_reference=args.source_ref,
                     thread_reference=args.thread_ref,
+                    source_profile=args.source_profile,
+                    source_key=args.source_key,
                     notes=args.notes,
                 )
                 action = "Updated" if existed else "Added"
@@ -368,40 +560,156 @@ def main() -> None:
                 )
                 print(f"Extracted record {args.record_id} to: {destination}")
         elif args.command == "view":
-            changes = subprocess.run(
-                [
-                    "git",
-                    "status",
-                    "--short",
-                    "--untracked-files=all",
-                    "--",
-                    "records",
-                ],
-                cwd=config.paths.vault,
-                check=True,
-                text=True,
-                capture_output=True,
-            ).stdout.splitlines()
-            count = build_view_from_head(
-                config.paths.vault,
-                config.paths.readable,
-                cipher,
-            )
-            commit = subprocess.run(
-                ["git", "rev-parse", "--short=12", "HEAD"],
-                cwd=config.paths.vault,
-                check=True,
-                text=True,
-                capture_output=True,
-            ).stdout.strip()
-            print(
-                f"Built readable view from commit {commit}: "
-                f"{count} record(s) -> {config.paths.readable}"
-            )
-            if changes:
-                print(f"warning: ignored {len(changes)} uncommitted record change(s):")
-                for change in changes:
-                    print(f"  {change}")
+            if args.view_command == "build":
+                changes = subprocess.run(
+                    [
+                        "git",
+                        "status",
+                        "--short",
+                        "--untracked-files=all",
+                        "--",
+                        "records",
+                    ],
+                    cwd=config.paths.vault,
+                    check=True,
+                    text=True,
+                    capture_output=True,
+                ).stdout.splitlines()
+                count = build_view_from_head(
+                    config.paths.vault,
+                    config.paths.readable,
+                    cipher,
+                )
+                commit = subprocess.run(
+                    ["git", "rev-parse", "--short=12", "HEAD"],
+                    cwd=config.paths.vault,
+                    check=True,
+                    text=True,
+                    capture_output=True,
+                ).stdout.strip()
+                print(
+                    f"Built readable view from commit {commit}: "
+                    f"{count} record(s) -> {config.paths.readable}"
+                )
+                if changes:
+                    print(
+                        f"warning: ignored {len(changes)} "
+                        "uncommitted record change(s):"
+                    )
+                    for change in changes:
+                        print(f"  {change}")
+            elif args.view_command == "export":
+                profile = (
+                    config.sources.folder.get(args.profile)
+                    if not args.folder
+                    else None
+                )
+                destination = resolve_views_folder(profile, args.folder)
+                for role, local in (
+                    ("vault", config.paths.vault),
+                    ("local inbox", config.paths.inbox),
+                    ("readable view", config.paths.readable),
+                ):
+                    if _paths_overlap(destination, local):
+                        raise ValueError(
+                            f"Folder export must not overlap the configured "
+                            f"{role}: {destination}"
+                        )
+                result = export_view_to_folder(
+                    vault=config.paths.vault,
+                    destination=destination,
+                    cipher=cipher,
+                    prune=args.prune,
+                )
+                print(
+                    f"Exported {result['records']} record(s), "
+                    f"{result['files']} managed file(s) -> {destination}"
+                )
+                print(
+                    f"changed: {result['changed']}; pruned: {result['pruned']}"
+                )
+        elif args.command == "source":
+            ledger = SourceLedger(config.paths.vault, cipher)
+            if args.source_command == "run":
+                if args.source_run_kind in {"email", "gmail"}:
+                    result = run_gmail_source(
+                        config=config,
+                        cipher=cipher,
+                        gmail=GmailSource(config, keychain),
+                        profile_name=args.profile,
+                        full=args.full,
+                        since=args.since,
+                        overlap=args.overlap,
+                        limit=args.limit,
+                    )
+                else:
+                    result = run_folder_source(
+                        config=config,
+                        cipher=cipher,
+                        profile_name=args.profile,
+                        folder_override=args.folder,
+                        full=args.full,
+                    )
+                _print_source_run(result)
+            elif args.source_command == "state":
+                if args.source_state_command == "list":
+                    states = [
+                        state.as_dict() for state in ledger.states().values()
+                    ]
+                    print(json.dumps(states, indent=2, ensure_ascii=False))
+                elif args.source_state_command in {"show", "reset"}:
+                    if args.kind in {"email", "gmail"}:
+                        if args.folder:
+                            raise ValueError("--folder is valid only for folder state")
+                        profile = gmail_profile(config, args.profile)
+                        identity = gmail_source_identity(config, profile)
+                        kind = "gmail"
+                    else:
+                        profile = folder_profile(
+                            config,
+                            args.profile,
+                            args.folder,
+                        )
+                        identity = folder_source_identity(profile, args.folder)
+                        kind = "folder"
+                    key = source_key(kind, profile.name, identity)
+                    if args.source_state_command == "show":
+                        state = ledger.state(key)
+                        if not state:
+                            raise RuntimeError(
+                                f"No source state found for {kind}:{profile.name}"
+                            )
+                        print(
+                            json.dumps(
+                                state.as_dict(),
+                                indent=2,
+                                ensure_ascii=False,
+                            )
+                        )
+                    else:
+                        destination = ledger.reset(
+                            key,
+                            kind=kind,
+                            profile=profile.name,
+                        )
+                        print(f"Reset source state with encrypted event: {destination}")
+                        print(
+                            "next: commit .pdocs/state/source-ledger/ "
+                            "to share the reset"
+                        )
+                elif args.source_state_command == "rebuild":
+                    destination = ledger.rebuild_local_index(config.paths.state)
+                    print(f"Rebuilt local source index: {destination}")
+        elif args.command == "ingest":
+            if args.ingest_command == "folder":
+                result = run_folder_source(
+                    config=config,
+                    cipher=cipher,
+                    profile_name=args.profile,
+                    folder_override=args.folder,
+                    full=args.full,
+                )
+                _print_source_run(result)
         elif args.command == "gmail":
             gmail = GmailSource(config, keychain)
             state = ReviewState(config.paths.state)

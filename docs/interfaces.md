@@ -40,9 +40,26 @@ Implemented:
 
 - local files
 - Gmail through read-only OAuth
+- generic local folder intake for PDF, JPEG, PNG, and HEIC files
 
 Possible later extensions include IMAP, scanners, or cloud drives. They should
 produce the same inbox artifacts rather than bypassing record review.
+
+## Source Ledger Interface
+
+Recurring sources append encrypted completion and reset events under
+`.pdocs/state/source-ledger/events/` in the vault. Replaying those events
+derives the last successful source window and exact source/content identities.
+Only a successful run writes an event.
+
+The ledger is provider-neutral. Source adapters provide a stable source key,
+source item identity, source time, and content checksum. Gmail uses message IDs
+and internal timestamps. Folder intake uses profile-relative paths and content
+hashes.
+
+Locks, failure reports, and the rebuildable index are local state outside Git.
+Agents pull before running a source and commit encrypted events with accepted
+records so another device can replay the same progress.
 
 ## Secret Interface
 
@@ -98,6 +115,10 @@ derived, replaceable, and never canonical.
 Implemented:
 
 - local filesystem view with an `INDEX.json`
+- folder export of the committed view with an app-owned manifest
+
+Folder export updates only managed files. Deletion is opt-in through `--prune`
+and never targets unrelated files.
 
 ## Backup Interface
 

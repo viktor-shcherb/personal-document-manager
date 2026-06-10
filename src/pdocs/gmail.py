@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+from datetime import UTC, datetime
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
@@ -137,6 +138,12 @@ class GmailSource:
                     reference=message["id"],
                     thread_reference=message.get("threadId"),
                     received_at=headers.get("date", ""),
+                    source_time=datetime.fromtimestamp(
+                        int(message["internalDate"]) / 1000,
+                        tz=UTC,
+                    )
+                    .replace(microsecond=0)
+                    .isoformat(),
                     sender=headers.get("from", ""),
                     subject=headers.get("subject", ""),
                     has_attachments=any(parsed.iter_attachments()),

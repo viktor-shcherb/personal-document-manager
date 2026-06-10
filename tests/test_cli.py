@@ -5,6 +5,9 @@ from types import SimpleNamespace
 import pytest
 
 from pdocs.cli import (
+    _paths_overlap,
+    _print_source_run,
+    build_parser,
     _initialize_repository_secret,
     _repair_keychain_access,
     _validate_record_input,
@@ -83,3 +86,67 @@ def test_init_uses_create_only_keychain_write():
         "pdocs.repository-encryption",
         DEPLOYMENT_ID,
     )
+
+
+def test_parser_accepts_ledger_backed_source_commands():
+    email = build_parser().parse_args(
+        [
+            "source",
+            "run",
+            "email",
+            "--profile",
+            "documents",
+            "--since",
+            "2026-01-01",
+        ]
+    )
+    folder = build_parser().parse_args(
+        ["ingest", "folder", "--profile", "iphone", "--full"]
+    )
+    state = build_parser().parse_args(
+        [
+            "source",
+            "state",
+            "show",
+            "folder",
+            "--folder",
+            "/tmp/exchange",
+        ]
+    )
+
+    assert email.source_run_kind == "email"
+    assert email.profile == "documents"
+    assert email.since == "2026-01-01"
+    assert folder.ingest_command == "folder"
+    assert folder.profile == "iphone"
+    assert folder.full is True
+    assert state.folder.as_posix() == "/tmp/exchange"
+
+
+def test_source_run_output_tells_agent_to_commit_ledger(capsys):
+    result = SimpleNamespace(
+        source_key="gmail:documents:key",
+        run_id="run-1",
+        query="has:attachment",
+        items_seen=2,
+        items_exported=1,
+        items_skipped_duplicate=1,
+        batch="/tmp/inbox",
+        ledger_event="/vault/.pdocs/state/source-ledger/events/event.pdoc",
+    )
+
+    _print_source_run(result)
+
+    output = capsys.readouterr().out
+    assert "encrypted ledger event:" in output
+    assert "records/ and .pdocs/state/source-ledger/" in output
+
+
+def test_paths_overlap_rejects_equal_parent_and_child(tmp_path):
+    root = tmp_path / "root"
+    child = root / "child"
+
+    assert _paths_overlap(root, root)
+    assert _paths_overlap(root, child)
+    assert _paths_overlap(child, root)
+    assert not _paths_overlap(root, tmp_path / "other")

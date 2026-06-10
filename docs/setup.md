@@ -28,15 +28,16 @@ cp -R skills/manage-personal-documents ~/.codex/skills/
 
 ## 2. Create Paths
 
-Choose three distinct paths:
+Choose distinct local paths:
 
 ```text
 vault     encrypted canonical Git repository
 inbox     temporary plaintext intake
 readable  generated plaintext latest view
+exchange  optional folder intake and readable export
 ```
 
-The inbox and readable paths must not be inside the vault.
+The inbox, readable, and exchange paths must not be inside the vault.
 
 Copy the example configuration:
 
@@ -54,7 +55,9 @@ sed -i '' "s/REPLACE-WITH-UUID/$deployment_id/" \
   ~/.config/pdocs/config.toml
 ```
 
-Edit the paths, Google account, and taxonomy for the user.
+Edit the paths, Google account, source profiles, and taxonomy for the user.
+Named source profiles give recurring imports a stable identity across sessions
+and devices.
 
 The deployment UUID is not a secret. PDM derives separate Keychain addresses
 from it:
@@ -231,7 +234,42 @@ The workflow backs up only encrypted Git history. It does not upload the inbox,
 readable view, Keychain secret, or recovery copy. See
 [backups.md](backups.md) for verification and recovery details.
 
-## 7. Test The Document Workflow
+## 7. Test Incremental Intake
+
+Pull the private vault before each recurring source run:
+
+```bash
+git -C "$HOME/Documents/Personal Documents Vault" pull --ff-only
+pdocs source run email --profile personal-documents
+```
+
+The first run uses the configured initial window. Later runs replay the
+encrypted ledger and apply the configured overlap while skipping exact source
+and content duplicates.
+
+For folder intake, place a test PDF or image in the configured `Inbox` and run:
+
+```bash
+pdocs ingest folder --profile iphone
+```
+
+Both commands print a run-specific plaintext inbox batch and an encrypted
+ledger event. Review the batch, import selected records, and commit the ledger
+event with the resulting records:
+
+```bash
+git -C "$HOME/Documents/Personal Documents Vault" add \
+  records .pdocs/state/source-ledger
+git -C "$HOME/Documents/Personal Documents Vault" commit \
+  -m "Import personal document source"
+git -C "$HOME/Documents/Personal Documents Vault" push
+```
+
+The event must still be committed when a successful run exports no items,
+because it advances the shared source window. See
+[source-ledger.md](source-ledger.md).
+
+## 8. Test The Document Workflow
 
 ```bash
 pdocs gmail search 'newer_than:7d'
@@ -251,7 +289,9 @@ pdocs record add \
   --owner self \
   --lifecycle event \
   --source-kind gmail \
-  --source-ref MESSAGE_ID
+  --source-ref MESSAGE_ID \
+  --source-profile personal-documents \
+  --source-key SOURCE_KEY
 ```
 
 Commit the encrypted record, then generate the readable view from that commit:
@@ -262,6 +302,16 @@ git commit -m "Add employment offer"
 git push
 pdocs view build
 ```
+
+Export the committed view to the configured folder transport:
+
+```bash
+pdocs view export folder --profile iphone
+```
+
+Use `--prune` only when stale files previously managed by PDM should be
+removed. Unrelated files are always preserved. See
+[folder-exchange.md](folder-exchange.md).
 
 ## Recovery
 

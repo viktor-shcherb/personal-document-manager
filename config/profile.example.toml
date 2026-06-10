@@ -22,6 +22,18 @@ scan_queries = [
   "newer_than:30d -category:promotions -category:social",
 ]
 
+[sources.gmail.personal-documents]
+query = "-category:promotions -category:social"
+initial_window = "30d"
+overlap_window = "24h"
+
+[sources.folder.iphone]
+# A normal local folder or a locally synchronized cloud folder.
+root = "~/Documents/PDM Exchange"
+inbox = "Inbox"
+views = "Views"
+extensions = ["pdf", "jpg", "jpeg", "png", "heic"]
+
 [backup]
 enabled = true
 provider = "google-drive"

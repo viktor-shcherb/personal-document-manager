@@ -56,6 +56,8 @@ def add_record(
     source_kind: str = "local",
     source_reference: str | None = None,
     thread_reference: str | None = None,
+    source_profile: str | None = None,
+    source_key: str | None = None,
     notes: str | None = None,
 ) -> Path:
     if lifecycle not in {"replaceable", "event"}:
@@ -86,6 +88,8 @@ def add_record(
             "kind": source_kind,
             "reference": source_reference,
             "thread_reference": thread_reference,
+            "profile": source_profile,
+            "source_key": source_key,
         },
         "content": {
             "filename": source_path.name,

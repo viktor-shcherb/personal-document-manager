@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 import uuid
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from pathlib import Path
 
 
 DEFAULT_CONFIG = Path("~/.config/pdocs/config.toml").expanduser()
+SOURCE_PROFILE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,35 @@ class BackupConfig:
 
 
 @dataclass(frozen=True)
+class GmailSourceProfile:
+    name: str
+    query: str
+    initial_window: str
+    overlap_window: str
+
+
+@dataclass(frozen=True)
+class FolderSourceProfile:
+    name: str
+    root: Path
+    inbox: str
+    views: str
+    extensions: tuple[str, ...]
+
+    def inbox_path(self) -> Path:
+        return _child_path(self.root, self.inbox)
+
+    def views_path(self) -> Path:
+        return _child_path(self.root, self.views)
+
+
+@dataclass(frozen=True)
+class SourcesConfig:
+    gmail: dict[str, GmailSourceProfile]
+    folder: dict[str, FolderSourceProfile]
+
+
+@dataclass(frozen=True)
 class AppConfig:
     path: Path
     deployment: DeploymentConfig
@@ -54,6 +85,7 @@ class AppConfig:
     security: SecurityConfig
     gmail: GmailConfig
     backup: BackupConfig
+    sources: SourcesConfig
     raw: dict
 
 
@@ -86,6 +118,58 @@ def drive_token_locator(config: AppConfig) -> SecretLocator:
 
 def _path(value: str) -> Path:
     return Path(os.path.expandvars(value)).expanduser().resolve()
+
+
+def _child_path(root: Path, value: str) -> Path:
+    candidate = (root / value).resolve()
+    if candidate != root and root not in candidate.parents:
+        raise ValueError(f"Configured path escapes its source root: {value!r}")
+    return candidate
+
+
+def validate_source_profile_name(name: str) -> str:
+    if not SOURCE_PROFILE.fullmatch(name):
+        raise ValueError(
+            "Source profile names must use lowercase ASCII letters, digits, "
+            "dots, underscores, and hyphens"
+        )
+    return name
+
+
+def _source_profiles(data: dict) -> SourcesConfig:
+    sources = data.get("sources", {})
+    gmail_profiles = {}
+    for name, profile in sources.get("gmail", {}).items():
+        validate_source_profile_name(name)
+        gmail_profiles[name] = GmailSourceProfile(
+            name=name,
+            query=profile["query"].strip(),
+            initial_window=profile.get("initial_window", "30d"),
+            overlap_window=profile.get("overlap_window", "24h"),
+        )
+
+    folder_profiles = {}
+    for name, profile in sources.get("folder", {}).items():
+        validate_source_profile_name(name)
+        extensions = tuple(
+            extension.lower()
+            if extension.startswith(".")
+            else f".{extension.lower()}"
+            for extension in profile.get(
+                "extensions",
+                (".pdf", ".jpg", ".jpeg", ".png", ".heic"),
+            )
+        )
+        folder_profiles[name] = FolderSourceProfile(
+            name=name,
+            root=_path(profile["root"]),
+            inbox=profile.get("inbox", "Inbox"),
+            views=profile.get("views", "Views"),
+            extensions=extensions,
+        )
+        folder_profiles[name].inbox_path()
+        folder_profiles[name].views_path()
+    return SourcesConfig(gmail=gmail_profiles, folder=folder_profiles)
 
 
 def _deployment_id(value: str) -> str:
@@ -137,5 +221,6 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             oauth_client=_path(backup.get("oauth_client", default_oauth_client)),
             folder_name=backup.get("folder_name", "Personal Document Backups"),
         ),
+        sources=_source_profiles(data),
         raw=data,
     )

@@ -75,3 +75,65 @@ def test_config_rejects_non_uuid_deployment_id(tmp_path: Path):
 
     with pytest.raises(ValueError, match="must be a UUID"):
         load_config(config_path)
+
+
+def test_config_loads_named_source_profiles(tmp_path: Path):
+    config_path = tmp_path / "config.toml"
+    _write_config(config_path, DEPLOYMENT_ID)
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8")
+        + f"""
+[sources.gmail.documents]
+query = "has:attachment"
+initial_window = "60d"
+overlap_window = "48h"
+
+[sources.folder.iphone]
+root = "{tmp_path / "exchange"}"
+inbox = "Incoming"
+views = "Readable"
+extensions = ["PDF", ".HEIC"]
+""",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+
+    assert config.sources.gmail["documents"].initial_window == "60d"
+    folder = config.sources.folder["iphone"]
+    assert folder.inbox_path() == (tmp_path / "exchange/Incoming")
+    assert folder.views_path() == (tmp_path / "exchange/Readable")
+    assert folder.extensions == (".pdf", ".heic")
+
+
+def test_config_rejects_folder_path_outside_source_root(tmp_path: Path):
+    config_path = tmp_path / "config.toml"
+    _write_config(config_path, DEPLOYMENT_ID)
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8")
+        + f"""
+[sources.folder.invalid]
+root = "{tmp_path / "exchange"}"
+inbox = "../outside"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="escapes its source root"):
+        load_config(config_path)
+
+
+def test_config_rejects_unsafe_source_profile_name(tmp_path: Path):
+    config_path = tmp_path / "config.toml"
+    _write_config(config_path, DEPLOYMENT_ID)
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8")
+        + f"""
+[sources.folder."../../outside"]
+root = "{tmp_path / "exchange"}"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Source profile names"):
+        load_config(config_path)

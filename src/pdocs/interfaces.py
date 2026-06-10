@@ -46,6 +46,7 @@ class SourceCandidate:
     reference: str
     thread_reference: str | None
     received_at: str
+    source_time: str
     sender: str
     subject: str
     has_attachments: bool

@@ -27,7 +27,9 @@ content/<original filename>
   "source": {
     "kind": "gmail",
     "reference": "gmail-message-id",
-    "thread_reference": "gmail-thread-id"
+    "thread_reference": "gmail-thread-id",
+    "profile": "personal-documents",
+    "source_key": "gmail:personal-documents:..."
   },
   "content": {
     "filename": "contract.pdf",
@@ -62,3 +64,19 @@ An `event` record cannot be overwritten by the normal add command.
 
 The content file is stored byte-for-byte. Conversion, OCR, previews, and
 readable views are derivatives and must not replace the original.
+
+## Source Ledger
+
+Recurring-source progress is stored as encrypted schema-1 JSON events:
+
+```text
+.pdocs/state/source-ledger/events/<timestamp>_<event-id>.pdoc
+```
+
+Events are append-only and use unique filenames so independently created
+events can merge through Git. They contain source identity, run windows,
+counts, exact source item identifiers, content checksums, and source times.
+Resetting a source appends a reset event instead of rewriting history.
+
+The event payload is encrypted with the repository cipher. Local locks,
+failure reports, and the derived source index remain outside the vault.

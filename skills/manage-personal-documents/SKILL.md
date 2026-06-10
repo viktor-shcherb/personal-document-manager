@@ -1,6 +1,6 @@
 ---
 name: manage-personal-documents
-description: Maintain an encrypted, Git-versioned personal document repository. Use when an agent needs to review local files or Gmail messages, decide which items are durable personal records, preserve important attachmentless correspondence, add or supersede records, generate the latest readable view, or commit and push document updates.
+description: Maintain an encrypted, Git-versioned personal document repository. Use when an agent needs to run incremental Gmail or folder intake through the shared source ledger, review local files or messages, preserve durable records, export committed readable views, or commit and push document updates.
 ---
 
 # Manage Personal Documents
@@ -14,7 +14,10 @@ mailbox or filesystem mirror.
    `~/.config/pdocs/config.toml`.
 2. Run `pdocs check`.
 3. Read [references/record-policy.md](references/record-policy.md).
-4. Keep the configured vault, inbox, and readable view as separate paths.
+4. Read [references/source-ledger.md](references/source-ledger.md) before
+   running a recurring Gmail or folder source.
+5. Keep the configured vault, inbox, readable view, and exchange folders
+   separate.
 
 Never retrieve or print a secret directly. Use `pdocs` commands, which access
 the configured secret store internally.
@@ -23,7 +26,7 @@ the configured secret store internally.
 
 For local files, inspect the file and its surrounding context before importing.
 
-For Gmail:
+For one-off Gmail inspection:
 
 ```bash
 pdocs gmail scan
@@ -39,7 +42,24 @@ that establishes consequential facts.
 Ignore newsletters, marketing, routine notifications, casual discussion, and
 documents outside the configured managed scope.
 
-## Export Originals
+## Run Recurring Intake
+
+Recurring sources MUST use the encrypted shared ledger:
+
+```bash
+git -C VAULT pull --ff-only
+pdocs source run email --profile PROFILE
+pdocs ingest folder --profile PROFILE
+```
+
+Do not use raw `gmail scan` or `gmail export` as a replacement for a configured
+recurring source. Those commands do not advance the shared ledger.
+
+Run only one agent or device at a time for a given source profile. After a
+successful run, review the printed batch before committing its ledger event.
+The event advances the incremental window even when no items were exported.
+
+## Export One-Off Originals
 
 Export selected Gmail messages before adding them:
 
@@ -95,8 +115,14 @@ Include Gmail provenance when applicable:
 ```bash
   --source-kind gmail \
   --source-ref MESSAGE_ID \
-  --thread-ref THREAD_ID
+  --thread-ref THREAD_ID \
+  --source-profile PROFILE \
+  --source-key SOURCE_KEY
 ```
+
+For recurring intake, copy `source_profile`, `source_key`, source references,
+and checksums from the staged `source.json` or `manifest.json`. Do not invent
+or shorten a source key.
 
 Store third-party records only when they are legitimately part of the user's
 personal administration. Set ownership accurately and avoid broad sharing.
@@ -108,12 +134,15 @@ After changes:
 1. Run the compact `pdocs record list` and inspect changed records with
    `pdocs record show RECORD_ID`. Use `pdocs record list --json` only when
    complete metadata for every record is required.
-2. Check that Git contains only encrypted `.pdoc` records and non-secret policy
-   files.
-3. Commit a concise description of the changed logical records.
-4. Push when the deployment policy enables automatic push.
-5. Confirm the configured Google Drive backup workflow succeeds.
-6. Run `pdocs view build` to materialize the newly committed `HEAD`.
+2. Check that Git contains only encrypted records, encrypted source-ledger
+   events, and non-secret policy files.
+3. For a successful recurring source run, commit both `records/` and
+   `.pdocs/state/source-ledger/`. Do this even when only the ledger changed.
+4. Commit a concise description of the changed logical records or source
+   checkpoint.
+5. Push when the deployment policy enables automatic push.
+6. Confirm the configured Google Drive backup workflow succeeds.
+7. Run `pdocs view build` to materialize the newly committed `HEAD`.
 
 Read the commit identifier printed by `view build`. If it warns that
 uncommitted record changes were ignored, do not describe the readable view as
@@ -121,6 +150,10 @@ containing those changes.
 
 Never add inbox files, readable files, OAuth material, recovery codes, or
 encryption keys to Git.
+
+If a source run fails, do not create a checkpoint manually. Failed runs do not
+advance the shared ledger. Inspect the local failure report under the
+configured state directory, fix the cause, and rerun.
 
 A backup failure does not roll back the push. Report it, diagnose the failed
 workflow, and retry it before treating the repository as fully protected.
@@ -130,3 +163,8 @@ workflow, and retry it before treating the repository as fully protected.
 Do not delete a record, rewrite ownership, or collapse ambiguous records
 without the approval required by deployment policy. Surface factual conflicts
 instead of silently choosing one version.
+
+Do not edit or delete encrypted ledger events manually. The
+`pdocs source state reset` command appends a shared reset event and requires
+the same approval as a destructive re-import. `pdocs source state rebuild`
+only regenerates the local derived index and is safe.

@@ -32,7 +32,11 @@ packages, general downloads, or an entire mailbox.
   tokens outside the document repository. New items are create-only, and
   updates require collision checks against the value previously read.
 - **Gmail** provides read-only discovery of potentially important messages and
-  preserves selected emails in their original form.
+  preserves selected emails in their original form. Recurring scans use an
+  encrypted source ledger so sessions and devices share incremental progress.
+- **Folder exchange** stages scans and files from local or synchronized folders
+  and exports the latest committed readable view without deleting unrelated
+  files.
 - **Git and private GitHub** store encrypted records and retain previous
   versions.
 - **Google Drive** receives a verified backup of the complete repository
@@ -60,7 +64,8 @@ have no attachment.
 ### Find the latest readable documents
 
 Encrypted records remain canonical, while a separate local folder contains a
-readable copy of the latest committed versions for normal use.
+readable copy of the latest committed versions for normal use. That view can
+also be exported to an iCloud Drive or other locally synchronized folder.
 
 ### Recover after loss
 
@@ -127,6 +132,8 @@ backup integration creates or explicitly uses.
 - [Setup guide](docs/setup.md)
 - [Frequently asked questions](docs/faq.md)
 - [Backup and recovery](docs/backups.md)
+- [Incremental source ledger](docs/source-ledger.md)
+- [Folder exchange](docs/folder-exchange.md)
 - [Security and extension boundaries](docs/interfaces.md)
 - [Encrypted storage format](docs/storage-format.md)
 
