@@ -17,4 +17,6 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv run --extra dev pytest
-      - run: uv run python -m compileall -q src tests
+      - run: uv run --extra dev ruff check src tests .github/actions
+      - run: uv run --extra dev ruff format --check src tests .github/actions
+      - run: uv run python -m compileall -q src tests .github/actions

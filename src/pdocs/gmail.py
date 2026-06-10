@@ -26,8 +26,8 @@ def _google_imports():
         from googleapiclient.discovery import build
     except ImportError as error:
         raise GmailError(
-            "Gmail dependencies are not installed; install the project with "
-            "the 'gmail' extra"
+            "Google dependencies are not installed; install the project with "
+            "the 'google' extra"
         ) from error
     return Request, Credentials, InstalledAppFlow, build
 

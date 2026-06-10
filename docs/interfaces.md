@@ -88,6 +88,31 @@ Implemented:
 
 - local filesystem view with an `INDEX.json`
 
+## Backup Interface
+
+A backup implementation has three responsibilities:
+
+```text
+snapshot(repository) -> complete repository artifact
+verify_local(artifact) -> valid or error
+replace_remote(artifact, repository identity) -> remote object reference
+```
+
+Implemented:
+
+- a lossless Git bundle containing all fetched branches, tags, remote refs,
+  and their reachable history
+- Google Drive upload through a user OAuth grant limited to `drive.file`
+- one stable Drive object per GitHub repository, replaced after every push
+- resumable transfer followed by size and MD5 verification
+
+The backup stores the encrypted repository, not the plaintext inbox or readable
+view. Drive's own file-revision retention is not part of the recovery model;
+the current bundle itself contains the Git history.
+
+GitHub Actions is the current scheduler. The backup action is reusable, but
+there are no unused implementations for other schedulers or storage providers.
+
 ## Policy Versus Mechanism
 
 Configuration controls paths, providers, domains, scan queries, and approval
@@ -95,4 +120,6 @@ thresholds. Agent policy decides whether a candidate is a durable record, which
 record it supersedes, who owns it, and whether correspondence has evidentiary
 value.
 
-Backup is outside the current interface set and will be designed separately.
+Backup failure does not alter the Git push that triggered it. It must remain
+visible as a failed GitHub Actions run and be retried before backup health is
+considered current.

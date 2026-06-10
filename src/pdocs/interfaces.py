@@ -18,6 +18,19 @@ class Cipher(Protocol):
 
 
 @dataclass(frozen=True)
+class BackupArtifact:
+    path: Path
+    repository: str
+    commit: str
+    size: int
+    checksum: str
+
+
+class BackupSink(Protocol):
+    def replace(self, artifact: BackupArtifact) -> str: ...
+
+
+@dataclass(frozen=True)
 class SourceCandidate:
     reference: str
     thread_reference: str | None

@@ -3,12 +3,13 @@
 A small, agent-oriented toolkit for maintaining a private personal document
 repository.
 
-It is designed around four practical properties:
+It is designed around five practical properties:
 
 1. Secrets stay in a system secret store, outside version control.
 2. Canonical records are encrypted before entering Git.
 3. Git preserves previous issues of replaceable records.
 4. A readable view of the latest commit is generated outside the repository.
+5. Each push replaces a verified full-history backup in Google Drive.
 
 The initial implementation supports:
 
@@ -16,6 +17,7 @@ The initial implementation supports:
 - GnuPG symmetric encryption
 - Gmail read-only discovery and `.eml` export
 - a local Git repository with a private GitHub remote
+- Google Drive backup of complete Git history through GitHub Actions
 - a generated plaintext view of current records
 - a Codex-compatible skill for agent maintenance
 
@@ -43,6 +45,7 @@ config/profile.example.toml       Example deployment profile
 docs/interfaces.md                Extension boundaries
 docs/setup.md                     User setup
 docs/storage-format.md            Encrypted record format
+.github/actions/                  Reusable Google Drive backup action
 skills/manage-personal-documents/ Agent workflow
 src/pdocs/                        Local command-line tool
 ```
@@ -68,16 +71,15 @@ git push
 pdocs view build
 ```
 
+The vault's push workflow creates and verifies a complete Git bundle, then
+replaces one stable app-managed file in Google Drive. See
+[docs/backups.md](docs/backups.md).
+
 ## Security Boundary
 
 The encrypted Git repository is canonical. The inbox and readable view contain
 plaintext and must remain outside that repository. Commands never print
 encryption passphrases or OAuth refresh tokens.
-
-## Status
-
-The project currently covers local record maintenance and Gmail intake. Backup
-orchestration is intentionally deferred.
 
 ## License
 

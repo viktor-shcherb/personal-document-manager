@@ -1,0 +1,75 @@
+name: Backup Git history to Google Drive
+description: Create a complete Git bundle and replace its app-managed Google Drive backup.
+
+inputs:
+  oauth-client-id:
+    description: Google OAuth desktop client ID.
+    required: true
+  oauth-client-secret:
+    description: Google OAuth desktop client secret.
+    required: true
+  oauth-refresh-token:
+    description: Refresh token authorized only for the Drive file scope.
+    required: true
+  repository-path:
+    description: Checked-out Git repository to back up.
+    required: false
+    default: "."
+  folder-name:
+    description: Name of the app-managed folder created in My Drive.
+    required: false
+    default: Personal Document Backups
+  folder-id:
+    description: Optional app-accessible Drive folder ID instead of automatic discovery.
+    required: false
+    default: ""
+  backup-name:
+    description: Stable Drive filename; defaults to OWNER-REPOSITORY.bundle.
+    required: false
+    default: ""
+
+outputs:
+  file-id:
+    description: Google Drive file ID of the current backup.
+    value: ${{ steps.upload.outputs.file-id }}
+  folder-id:
+    description: Google Drive folder containing the backup.
+    value: ${{ steps.upload.outputs.folder-id }}
+  md5:
+    description: MD5 checksum verified after upload.
+    value: ${{ steps.upload.outputs.md5 }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create complete Git bundle
+      shell: bash
+      env:
+        REPOSITORY_PATH: ${{ inputs.repository-path }}
+      run: |
+        set -euo pipefail
+        git -C "$REPOSITORY_PATH" rev-parse --git-dir >/dev/null
+        if [ "$(git -C "$REPOSITORY_PATH" rev-parse --is-shallow-repository)" = "true" ]; then
+          git -C "$REPOSITORY_PATH" fetch --unshallow --tags
+        fi
+        if git -C "$REPOSITORY_PATH" remote get-url origin >/dev/null 2>&1; then
+          git -C "$REPOSITORY_PATH" fetch --force --prune --tags origin \
+            '+refs/heads/*:refs/remotes/origin/*'
+        fi
+        bundle="$RUNNER_TEMP/pdocs-repository.bundle"
+        git -C "$REPOSITORY_PATH" bundle create "$bundle" \
+          --branches --tags --remotes
+        git -C "$REPOSITORY_PATH" bundle verify "$bundle"
+
+    - name: Upload and verify Google Drive backup
+      id: upload
+      shell: bash
+      env:
+        PDOCS_BUNDLE_PATH: ${{ runner.temp }}/pdocs-repository.bundle
+        PDOCS_BACKUP_NAME: ${{ inputs.backup-name }}
+        PDOCS_DRIVE_FOLDER_NAME: ${{ inputs.folder-name }}
+        PDOCS_DRIVE_FOLDER_ID: ${{ inputs.folder-id }}
+        PDOCS_GOOGLE_CLIENT_ID: ${{ inputs.oauth-client-id }}
+        PDOCS_GOOGLE_CLIENT_SECRET: ${{ inputs.oauth-client-secret }}
+        PDOCS_GOOGLE_REFRESH_TOKEN: ${{ inputs.oauth-refresh-token }}
+      run: python3 "$GITHUB_ACTION_PATH/upload.py"

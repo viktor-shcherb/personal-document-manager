@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .backup import GoogleDriveBackupAuth, install_backup_workflow
 from .config import AppConfig, load_config
 from .crypto import GpgSymmetricCipher
 from .gmail import GmailSource
@@ -141,6 +142,16 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("message_id")
     reviewed = gmail_commands.add_parser("reviewed")
     reviewed.add_argument("message_ids", nargs="+")
+
+    backup_parser = commands.add_parser("backup")
+    backup_commands = backup_parser.add_subparsers(dest="backup_command", required=True)
+    backup_commands.add_parser("auth")
+    backup_commands.add_parser("status")
+    github_secrets = backup_commands.add_parser("github-secrets")
+    github_secrets.add_argument("--repository", required=True)
+    install_workflow = backup_commands.add_parser("install-workflow")
+    install_workflow.add_argument("--action-ref", default="v1")
+    install_workflow.add_argument("--force", action="store_true")
     return parser
 
 
@@ -273,6 +284,26 @@ def main() -> None:
             elif args.gmail_command == "reviewed":
                 state.mark(args.message_ids)
                 print(f"Marked {len(args.message_ids)} message(s) reviewed")
+        elif args.command == "backup":
+            backup = GoogleDriveBackupAuth(config, keychain)
+            if args.backup_command == "auth":
+                backup.authorize()
+                print("Google Drive OAuth token stored in macOS Keychain")
+            elif args.backup_command == "status":
+                backup.token_data()
+                print("Google Drive backup credentials are available")
+            elif args.backup_command == "github-secrets":
+                backup.configure_github(args.repository)
+                print(f"Google Drive backup secrets configured for {args.repository}")
+            elif args.backup_command == "install-workflow":
+                print(
+                    install_backup_workflow(
+                        config.paths.vault,
+                        action_ref=args.action_ref,
+                        folder_name=config.backup.folder_name,
+                        force=args.force,
+                    )
+                )
     except (KeyError, OSError, RuntimeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         raise SystemExit(1) from error

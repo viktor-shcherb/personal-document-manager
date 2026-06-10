@@ -13,12 +13,10 @@ On macOS, install:
 brew install git gh gnupg uv
 ```
 
-Install the CLI with Gmail support from a local clone:
+Install the CLI with Google API support from a local clone:
 
 ```bash
-uv tool install --with google-api-python-client \
-  --with google-auth-httplib2 \
-  --with google-auth-oauthlib .
+uv tool install '.[google]'
 ```
 
 Install the agent skill:
@@ -107,7 +105,53 @@ pdocs gmail auth
 
 The refresh token is stored in macOS Keychain.
 
-## 6. Test The Workflow
+## 6. Configure Google Drive Backup
+
+In the same Google Cloud project:
+
+1. Enable the Google Drive API.
+2. Add `https://www.googleapis.com/auth/drive.file` to the consent screen.
+3. Keep the user's Google account as an allowed user.
+4. Set the OAuth publishing status to `Production`. In `Testing`, refresh
+   tokens expire after seven days.
+5. Reuse the desktop OAuth client JSON configured in `[backup]`.
+
+Authorize the separate Drive grant:
+
+```bash
+pdocs backup auth
+pdocs backup status
+```
+
+Copy the required values directly from Keychain into GitHub Actions secrets
+without printing them:
+
+```bash
+pdocs backup github-secrets \
+  --repository OWNER/personal-documents
+```
+
+Install the push-triggered workflow into the private vault:
+
+```bash
+pdocs backup install-workflow
+git add .github/workflows/backup-google-drive.yml
+git commit -m "Back up Git history to Google Drive"
+git push
+```
+
+The first successful run creates `Personal Document Backups` in My Drive and
+uploads a stable `OWNER-personal-documents.bundle` file. Confirm the run:
+
+```bash
+gh run list --repo OWNER/personal-documents --workflow backup-google-drive.yml
+```
+
+The workflow backs up only encrypted Git history. It does not upload the inbox,
+readable view, Keychain secret, or recovery copy. See
+[backups.md](backups.md) for verification and recovery details.
+
+## 7. Test The Document Workflow
 
 ```bash
 pdocs gmail search 'newer_than:7d'
@@ -142,6 +186,5 @@ pdocs view build
 ## Recovery
 
 The vault can be reconstructed from Git plus the Keychain secret or its offline
-recovery copy. The readable view is disposable.
-
-Repository-history backup is intentionally not configured by this version.
+recovery copy. If GitHub is unavailable, restore the current Git bundle from
+Google Drive. The readable view is disposable.

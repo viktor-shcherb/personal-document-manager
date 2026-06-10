@@ -35,11 +35,22 @@ class GmailConfig:
 
 
 @dataclass(frozen=True)
+class BackupConfig:
+    enabled: bool
+    provider: str
+    account: str
+    oauth_client: Path
+    token_service: str
+    folder_name: str
+
+
+@dataclass(frozen=True)
 class AppConfig:
     path: Path
     paths: PathsConfig
     security: SecurityConfig
     gmail: GmailConfig
+    backup: BackupConfig
     raw: dict
 
 
@@ -56,6 +67,10 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     paths = data["paths"]
     security = data["security"]
     gmail = data.get("gmail", {})
+    backup = data.get("backup", {})
+    default_oauth_client = gmail.get(
+        "oauth_client", "~/.config/pdocs/google-oauth-client.json"
+    )
     return AppConfig(
         path=config_path,
         paths=PathsConfig(
@@ -75,11 +90,17 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         gmail=GmailConfig(
             enabled=gmail.get("enabled", False),
             account=gmail.get("account", ""),
-            oauth_client=_path(
-                gmail.get("oauth_client", "~/.config/pdocs/google-oauth-client.json")
-            ),
+            oauth_client=_path(default_oauth_client),
             token_service=gmail.get("token_service", "pdocs-google-oauth"),
             scan_queries=tuple(gmail.get("scan_queries", ())),
+        ),
+        backup=BackupConfig(
+            enabled=backup.get("enabled", False),
+            provider=backup.get("provider", "google-drive"),
+            account=backup.get("account", gmail.get("account", "")),
+            oauth_client=_path(backup.get("oauth_client", default_oauth_client)),
+            token_service=backup.get("token_service", "pdocs-google-drive-oauth"),
+            folder_name=backup.get("folder_name", "Personal Document Backups"),
         ),
         raw=data,
     )

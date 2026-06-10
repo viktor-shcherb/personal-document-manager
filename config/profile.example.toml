@@ -21,6 +21,14 @@ scan_queries = [
   "newer_than:30d -category:promotions -category:social",
 ]
 
+[backup]
+enabled = true
+provider = "google-drive"
+account = "you@example.com"
+oauth_client = "~/.config/pdocs/google-oauth-client.json"
+token_service = "pdocs-google-drive-oauth"
+folder_name = "Personal Document Backups"
+
 [workflow]
 commit_after_import = true
 push_after_commit = true

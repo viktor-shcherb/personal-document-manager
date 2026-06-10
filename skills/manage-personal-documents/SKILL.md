@@ -111,10 +111,14 @@ After changes:
    files.
 3. Commit a concise description of the changed logical records.
 4. Push when the deployment policy enables automatic push.
-5. Run `pdocs view build` to materialize the newly committed `HEAD`.
+5. Confirm the configured Google Drive backup workflow succeeds.
+6. Run `pdocs view build` to materialize the newly committed `HEAD`.
 
 Never add inbox files, readable files, OAuth material, recovery codes, or
 encryption keys to Git.
+
+A backup failure does not roll back the push. Report it, diagnose the failed
+workflow, and retry it before treating the repository as fully protected.
 
 ## Destructive Actions
 
