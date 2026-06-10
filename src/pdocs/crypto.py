@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from .config import SecurityConfig
+from .config import AppConfig, repository_secret_locator
 from .interfaces import SecretStore
 
 
@@ -14,15 +14,13 @@ class CryptoError(RuntimeError):
 
 
 class GpgSymmetricCipher:
-    def __init__(self, config: SecurityConfig, secrets: SecretStore):
+    def __init__(self, config: AppConfig, secrets: SecretStore):
         self.config = config
         self.secrets = secrets
 
     def _passphrase(self) -> str:
-        return self.secrets.get(
-            self.config.keychain_service,
-            self.config.repository_key_account,
-        )
+        locator = repository_secret_locator(self.config)
+        return self.secrets.get(locator.service, locator.account)
 
     def seal(self, source: Path, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -35,7 +33,7 @@ class GpgSymmetricCipher:
         try:
             result = subprocess.run(
                 [
-                    self.config.gpg_binary,
+                    self.config.security.gpg_binary,
                     "--batch",
                     "--yes",
                     "--quiet",
@@ -69,7 +67,7 @@ class GpgSymmetricCipher:
         destination.parent.mkdir(parents=True, exist_ok=True)
         result = subprocess.run(
             [
-                self.config.gpg_binary,
+                self.config.security.gpg_binary,
                 "--batch",
                 "--yes",
                 "--quiet",

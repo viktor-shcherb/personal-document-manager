@@ -46,7 +46,10 @@ produce the same inbox artifacts rather than bypassing record review.
 
 ## Secret Interface
 
-A secret store must retrieve and update named values without printing them.
+A secret store must retrieve named values without printing them. Initial writes
+must be create-only. Replacement must verify that the current value matches the
+value previously read, so an unexpected or concurrent change fails instead of
+being overwritten.
 
 Implemented:
 
@@ -54,6 +57,14 @@ Implemented:
 
 Secrets include the repository encryption passphrase and Gmail OAuth token.
 Secret files and recovery material never enter Git.
+
+Repository encryption secrets are not replaceable in place. Keychain access
+repair uses a verified temporary recovery item and removes it only after the
+recreated original is verified.
+
+Each deployment has a required UUID. The implementation derives fixed,
+role-specific Keychain services and UUID-namespaced accounts, rather than
+accepting arbitrary secret addresses from deployment configuration.
 
 ## Cipher Interface
 

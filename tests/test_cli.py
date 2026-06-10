@@ -4,7 +4,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from pdocs.cli import _repair_keychain_access, _validate_record_input
+from pdocs.cli import (
+    _initialize_repository_secret,
+    _repair_keychain_access,
+    _validate_record_input,
+)
+
+DEPLOYMENT_ID = "00000000-0000-4000-8000-000000000001"
 
 
 def _config(domains: list[str]):
@@ -42,27 +48,38 @@ def test_repair_keychain_access_preserves_secret():
     class MemoryKeychain:
         def __init__(self):
             self.value = "existing encryption secret"
-            self.deleted = False
 
-        def get(self, service: str, account: str) -> str:
-            return self.value
-
-        def delete(self, service: str, account: str) -> None:
-            self.deleted = True
-            self.value = ""
-
-        def set(self, service: str, account: str, value: str) -> None:
-            assert self.deleted
-            self.value = value
+        def repair_access(self, service: str, account: str) -> None:
+            assert service == "pdocs.repository-encryption"
+            assert account == DEPLOYMENT_ID
 
     config = SimpleNamespace(
-        security=SimpleNamespace(
-            keychain_service="pdocs",
-            repository_key_account="repository-encryption",
-        )
+        deployment=SimpleNamespace(id=DEPLOYMENT_ID),
     )
     keychain = MemoryKeychain()
 
     _repair_keychain_access(config, keychain)
 
     assert keychain.value == "existing encryption secret"
+
+
+def test_init_uses_create_only_keychain_write():
+    class MemoryKeychain:
+        def __init__(self):
+            self.created = None
+
+        def create(self, service: str, account: str, value: str) -> None:
+            self.created = (service, account, value)
+
+    config = SimpleNamespace(
+        deployment=SimpleNamespace(id=DEPLOYMENT_ID),
+    )
+    keychain = MemoryKeychain()
+
+    _initialize_repository_secret(config, keychain)
+
+    assert keychain.created is not None
+    assert keychain.created[:2] == (
+        "pdocs.repository-encryption",
+        DEPLOYMENT_ID,
+    )

@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .config import AppConfig
+from .config import AppConfig, drive_token_locator
 from .interfaces import SecretStore
 
 
@@ -46,11 +46,20 @@ class GoogleDriveBackupAuth:
             raise BackupError("Backup account is missing from configuration")
         return self.config.backup.account
 
-    def authorize(self) -> None:
+    def authorize(self, *, replace_existing: bool = False) -> None:
         InstalledAppFlow = _google_imports()
+        self._account()
         client_path = self.config.backup.oauth_client
         if not client_path.is_file():
             raise BackupError(f"OAuth client file not found: {client_path}")
+        locator = drive_token_locator(self.config)
+        previous = self.secrets.get_optional(locator.service, locator.account)
+        if previous is not None and not replace_existing:
+            raise BackupError(
+                "Google Drive token already exists in Keychain; use "
+                "'pdocs backup auth --replace-existing' only when deliberately "
+                "reauthorizing this configured account"
+            )
         flow = InstalledAppFlow.from_client_secrets_file(
             str(client_path),
             [DRIVE_SCOPE],
@@ -65,18 +74,22 @@ class GoogleDriveBackupAuth:
                 "Google did not issue a refresh token; revoke the existing app "
                 "grant and authorize again"
             )
-        self.secrets.set(
-            self.config.backup.token_service,
-            self._account(),
-            credentials.to_json(),
-        )
+        value = credentials.to_json()
+        if previous is None:
+            self.secrets.create(locator.service, locator.account, value)
+        else:
+            self.secrets.replace(
+                locator.service,
+                locator.account,
+                value,
+                expected=previous,
+            )
 
     def token_data(self) -> dict[str, str]:
+        self._account()
+        locator = drive_token_locator(self.config)
         try:
-            raw_token = self.secrets.get(
-                self.config.backup.token_service,
-                self._account(),
-            )
+            raw_token = self.secrets.get(locator.service, locator.account)
         except Exception as error:
             raise BackupError(
                 "Google Drive backup is not authorized; run 'pdocs backup auth'"

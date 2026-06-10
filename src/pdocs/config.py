@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import os
 import tomllib
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
 
 DEFAULT_CONFIG = Path("~/.config/pdocs/config.toml").expanduser()
+
+
+@dataclass(frozen=True)
+class DeploymentConfig:
+    id: str
 
 
 @dataclass(frozen=True)
@@ -20,8 +26,6 @@ class PathsConfig:
 @dataclass(frozen=True)
 class SecurityConfig:
     cipher: str
-    keychain_service: str
-    repository_key_account: str
     gpg_binary: str
 
 
@@ -30,7 +34,6 @@ class GmailConfig:
     enabled: bool
     account: str
     oauth_client: Path
-    token_service: str
     scan_queries: tuple[str, ...]
 
 
@@ -40,13 +43,13 @@ class BackupConfig:
     provider: str
     account: str
     oauth_client: Path
-    token_service: str
     folder_name: str
 
 
 @dataclass(frozen=True)
 class AppConfig:
     path: Path
+    deployment: DeploymentConfig
     paths: PathsConfig
     security: SecurityConfig
     gmail: GmailConfig
@@ -54,8 +57,44 @@ class AppConfig:
     raw: dict
 
 
+@dataclass(frozen=True)
+class SecretLocator:
+    service: str
+    account: str
+
+
+def repository_secret_locator(config: AppConfig) -> SecretLocator:
+    return SecretLocator(
+        service="pdocs.repository-encryption",
+        account=config.deployment.id,
+    )
+
+
+def gmail_token_locator(config: AppConfig) -> SecretLocator:
+    return SecretLocator(
+        service="pdocs.gmail-oauth",
+        account=f"{config.deployment.id}:{config.gmail.account}",
+    )
+
+
+def drive_token_locator(config: AppConfig) -> SecretLocator:
+    return SecretLocator(
+        service="pdocs.google-drive-oauth",
+        account=f"{config.deployment.id}:{config.backup.account}",
+    )
+
+
 def _path(value: str) -> Path:
     return Path(os.path.expandvars(value)).expanduser().resolve()
+
+
+def _deployment_id(value: str) -> str:
+    try:
+        return str(uuid.UUID(value))
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ValueError(
+            "[deployment].id must be a UUID generated uniquely for this deployment"
+        ) from error
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:
@@ -64,6 +103,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     with config_path.open("rb") as handle:
         data = tomllib.load(handle)
 
+    deployment = data["deployment"]
     paths = data["paths"]
     security = data["security"]
     gmail = data.get("gmail", {})
@@ -73,6 +113,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     )
     return AppConfig(
         path=config_path,
+        deployment=DeploymentConfig(id=_deployment_id(deployment["id"])),
         paths=PathsConfig(
             vault=_path(paths["vault"]),
             inbox=_path(paths["inbox"]),
@@ -81,17 +122,12 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         ),
         security=SecurityConfig(
             cipher=security.get("cipher", "gpg-symmetric"),
-            keychain_service=security.get("keychain_service", "pdocs"),
-            repository_key_account=security.get(
-                "repository_key_account", "repository-encryption"
-            ),
             gpg_binary=security.get("gpg_binary", "gpg"),
         ),
         gmail=GmailConfig(
             enabled=gmail.get("enabled", False),
             account=gmail.get("account", ""),
             oauth_client=_path(default_oauth_client),
-            token_service=gmail.get("token_service", "pdocs-google-oauth"),
             scan_queries=tuple(gmail.get("scan_queries", ())),
         ),
         backup=BackupConfig(
@@ -99,7 +135,6 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             provider=backup.get("provider", "google-drive"),
             account=backup.get("account", gmail.get("account", "")),
             oauth_client=_path(backup.get("oauth_client", default_oauth_client)),
-            token_service=backup.get("token_service", "pdocs-google-drive-oauth"),
             folder_name=backup.get("folder_name", "Personal Document Backups"),
         ),
         raw=data,

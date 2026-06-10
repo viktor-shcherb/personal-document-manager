@@ -1,5 +1,9 @@
 version = 1
 
+[deployment]
+# Replace with a fresh lowercase UUID for every PDM deployment.
+id = "REPLACE-WITH-UUID"
+
 [paths]
 vault = "~/Documents/Personal Documents Vault"
 inbox = "~/Documents/Personal Documents Inbox"
@@ -8,15 +12,12 @@ state = "~/.local/state/pdocs"
 
 [security]
 cipher = "gpg-symmetric"
-keychain_service = "pdocs"
-repository_key_account = "repository-encryption"
 gpg_binary = "gpg"
 
 [gmail]
 enabled = true
 account = "you@example.com"
 oauth_client = "~/.config/pdocs/google-gmail-oauth-client.json"
-token_service = "pdocs-google-oauth"
 scan_queries = [
   "newer_than:30d -category:promotions -category:social",
 ]
@@ -26,7 +27,6 @@ enabled = true
 provider = "google-drive"
 account = "you@example.com"
 oauth_client = "~/.config/pdocs/google-drive-oauth-client.json"
-token_service = "pdocs-google-drive-oauth"
 folder_name = "Personal Document Backups"
 
 [workflow]

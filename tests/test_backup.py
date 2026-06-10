@@ -23,8 +23,58 @@ class StaticSecrets:
     def get(self, service: str, account: str) -> str:
         return self.value
 
-    def set(self, service: str, account: str, value: str) -> None:
+    def get_optional(self, service: str, account: str) -> str | None:
+        return self.value
+
+    def create(self, service: str, account: str, value: str) -> None:
+        if self.value:
+            raise RuntimeError("already exists")
         self.value = value
+
+    def replace(
+        self,
+        service: str,
+        account: str,
+        value: str,
+        *,
+        expected: str,
+    ) -> None:
+        if self.value != expected:
+            raise RuntimeError("changed")
+        self.value = value
+
+
+def test_authorize_refuses_existing_token_before_opening_browser(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    oauth_client = tmp_path / "oauth.json"
+    oauth_client.write_text("{}", encoding="utf-8")
+    config = SimpleNamespace(
+        deployment=SimpleNamespace(
+            id="00000000-0000-4000-8000-000000000001",
+        ),
+        backup=SimpleNamespace(
+            account="user@example.com",
+            oauth_client=oauth_client,
+        ),
+    )
+
+    class UnexpectedFlow:
+        @classmethod
+        def from_client_secrets_file(cls, *args, **kwargs):
+            raise AssertionError("OAuth browser flow must not start")
+
+    monkeypatch.setattr(
+        "pdocs.backup._google_imports",
+        lambda: UnexpectedFlow,
+    )
+
+    with pytest.raises(BackupError, match="already exists"):
+        GoogleDriveBackupAuth(
+            config,
+            StaticSecrets("existing token"),
+        ).authorize()
 
 
 def _upload_module():
@@ -130,10 +180,12 @@ def test_configure_github_sets_named_secrets_without_arguments(
         "refresh_token": "refresh-token",
     }
     config = SimpleNamespace(
+        deployment=SimpleNamespace(
+            id="00000000-0000-4000-8000-000000000001",
+        ),
         backup=SimpleNamespace(
             account="user@example.com",
-            token_service="pdocs-drive",
-        )
+        ),
     )
     calls = []
 

@@ -7,7 +7,7 @@ from email import policy
 from email.parser import BytesParser
 from pathlib import Path
 
-from .config import AppConfig
+from .config import AppConfig, gmail_token_locator
 from .interfaces import SecretStore, SourceCandidate
 
 
@@ -42,33 +42,48 @@ class GmailSource:
             raise GmailError("Gmail account is missing from configuration")
         return self.config.gmail.account
 
-    def _save_token(self, credentials) -> None:
-        self.secrets.set(
-            self.config.gmail.token_service,
-            self._token_account(),
-            credentials.to_json(),
-        )
+    def _save_token(self, credentials, *, previous: str | None = None) -> None:
+        self._token_account()
+        locator = gmail_token_locator(self.config)
+        value = credentials.to_json()
+        if previous is None:
+            self.secrets.create(locator.service, locator.account, value)
+        else:
+            self.secrets.replace(
+                locator.service,
+                locator.account,
+                value,
+                expected=previous,
+            )
 
-    def authorize(self) -> None:
+    def authorize(self, *, replace_existing: bool = False) -> None:
         _, _, InstalledAppFlow, _ = _google_imports()
+        self._token_account()
         if not self.config.gmail.oauth_client.is_file():
             raise GmailError(
                 f"OAuth client file not found: {self.config.gmail.oauth_client}"
+            )
+        locator = gmail_token_locator(self.config)
+        previous = self.secrets.get_optional(locator.service, locator.account)
+        if previous is not None and not replace_existing:
+            raise GmailError(
+                "Gmail token already exists in Keychain; use "
+                "'pdocs gmail auth --replace-existing' only when deliberately "
+                "reauthorizing this configured account"
             )
         flow = InstalledAppFlow.from_client_secrets_file(
             str(self.config.gmail.oauth_client),
             SCOPES,
         )
         credentials = flow.run_local_server(port=0)
-        self._save_token(credentials)
+        self._save_token(credentials, previous=previous)
 
     def _credentials(self):
         Request, Credentials, _, _ = _google_imports()
+        self._token_account()
+        locator = gmail_token_locator(self.config)
         try:
-            token = self.secrets.get(
-                self.config.gmail.token_service,
-                self._token_account(),
-            )
+            token = self.secrets.get(locator.service, locator.account)
         except Exception as error:
             raise GmailError(
                 "Gmail is not authorized; run 'pdocs gmail auth'"
@@ -79,7 +94,7 @@ class GmailSource:
         )
         if credentials.expired and credentials.refresh_token:
             credentials.refresh(Request())
-            self._save_token(credentials)
+            self._save_token(credentials, previous=token)
         if not credentials.valid:
             raise GmailError("Gmail credentials are invalid; authorize again")
         return credentials

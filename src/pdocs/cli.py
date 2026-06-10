@@ -10,14 +10,13 @@ from datetime import date
 from pathlib import Path
 
 from .backup import GoogleDriveBackupAuth, install_backup_workflow
-from .config import AppConfig, load_config
+from .config import AppConfig, load_config, repository_secret_locator
 from .crypto import GpgSymmetricCipher
 from .gmail import GmailSource
-from .keychain import KeychainError, MacOSKeychain
+from .keychain import MacOSKeychain
 from .records import (
     add_record,
     extract_record,
-    iter_record_paths,
     list_records,
     read_metadata,
     record_path,
@@ -29,7 +28,7 @@ from .view import build_view_from_head
 def _runtime(config_path: str | None):
     config = load_config(config_path)
     keychain = MacOSKeychain()
-    cipher = GpgSymmetricCipher(config.security, keychain)
+    cipher = GpgSymmetricCipher(config, keychain)
     return config, keychain, cipher
 
 
@@ -62,13 +61,20 @@ def _repair_keychain_access(
     config: AppConfig,
     keychain: MacOSKeychain,
 ) -> None:
-    service = config.security.keychain_service
-    account = config.security.repository_key_account
-    value = keychain.get(service, account)
-    if not value:
-        raise RuntimeError("Repository encryption secret is empty")
-    keychain.delete(service, account)
-    keychain.set(service, account, value)
+    locator = repository_secret_locator(config)
+    keychain.repair_access(locator.service, locator.account)
+
+
+def _initialize_repository_secret(
+    config: AppConfig,
+    keychain: MacOSKeychain,
+) -> None:
+    locator = repository_secret_locator(config)
+    keychain.create(
+        locator.service,
+        locator.account,
+        secret_generator.token_urlsafe(48),
+    )
 
 
 def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
@@ -87,11 +93,9 @@ def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
                 )
     if not shutil.which(config.security.gpg_binary):
         errors.append(f"GnuPG binary not found: {config.security.gpg_binary}")
+    locator = repository_secret_locator(config)
     try:
-        keychain.get(
-            config.security.keychain_service,
-            config.security.repository_key_account,
-        )
+        keychain.get(locator.service, locator.account)
         secret_status = "available"
     except Exception:
         secret_status = "missing"
@@ -111,6 +115,7 @@ def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
     else:
         errors.append("Vault is not a Git repository")
     print(f"config: {config.path}")
+    print(f"deployment: {config.deployment.id}")
     print(f"vault: {config.paths.vault}")
     print(f"inbox: {config.paths.inbox}")
     print(f"readable: {config.paths.readable}")
@@ -148,14 +153,9 @@ def build_parser() -> argparse.ArgumentParser:
     secrets_commands = secrets_parser.add_subparsers(
         dest="secrets_command", required=True
     )
-    init_secret = secrets_commands.add_parser(
+    secrets_commands.add_parser(
         "init",
         help="Generate and store a new vault encryption secret.",
-    )
-    init_secret.add_argument(
-        "--force",
-        action="store_true",
-        help="Replace the secret only when the vault contains no records.",
     )
     secrets_commands.add_parser(
         "repair-access",
@@ -231,7 +231,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Discover, inspect, and export Gmail messages.",
     )
     gmail_commands = gmail_parser.add_subparsers(dest="gmail_command", required=True)
-    gmail_commands.add_parser("auth")
+    gmail_auth = gmail_commands.add_parser("auth")
+    gmail_auth.add_argument(
+        "--replace-existing",
+        action="store_true",
+        help="Deliberately replace the token for the configured Gmail account.",
+    )
     search = gmail_commands.add_parser("search")
     search.add_argument("query")
     search.add_argument("--limit", type=int, default=50)
@@ -252,7 +257,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Authorize and install Google Drive Git-history backups.",
     )
     backup_commands = backup_parser.add_subparsers(dest="backup_command", required=True)
-    backup_commands.add_parser("auth")
+    backup_auth = backup_commands.add_parser("auth")
+    backup_auth.add_argument(
+        "--replace-existing",
+        action="store_true",
+        help="Deliberately replace the token for the configured Drive account.",
+    )
     backup_commands.add_parser("status")
     github_secrets = backup_commands.add_parser("github-secrets")
     github_secrets.add_argument("--repository", required=True)
@@ -270,44 +280,17 @@ def main() -> None:
             cmd_check(config, keychain)
         elif args.command == "secrets":
             if args.secrets_command == "init":
-                if args.force:
-                    if any(iter_record_paths(config.paths.vault)):
-                        raise RuntimeError(
-                            "Refusing to replace the encryption secret while "
-                            "records exist; use 'pdocs secrets repair-access' "
-                            "to fix repeated Keychain prompts"
-                        )
-                    keychain.delete(
-                        config.security.keychain_service,
-                        config.security.repository_key_account,
-                    )
-                else:
-                    try:
-                        keychain.get(
-                            config.security.keychain_service,
-                            config.security.repository_key_account,
-                        )
-                    except KeychainError:
-                        pass
-                    else:
-                        raise RuntimeError(
-                            "Repository encryption secret already exists; "
-                            "use --force to replace it"
-                        )
-                keychain.set(
-                    config.security.keychain_service,
-                    config.security.repository_key_account,
-                    secret_generator.token_urlsafe(48),
+                _initialize_repository_secret(
+                    config,
+                    keychain,
                 )
                 print(
                     "Repository encryption secret stored in macOS Keychain "
                     "with access granted to this CLI runtime"
                 )
             elif args.secrets_command == "status":
-                keychain.get(
-                    config.security.keychain_service,
-                    config.security.repository_key_account,
-                )
+                locator = repository_secret_locator(config)
+                keychain.get(locator.service, locator.account)
                 print("Repository encryption secret is available")
             elif args.secrets_command == "repair-access":
                 _repair_keychain_access(config, keychain)
@@ -423,7 +406,7 @@ def main() -> None:
             gmail = GmailSource(config, keychain)
             state = ReviewState(config.paths.state)
             if args.gmail_command == "auth":
-                gmail.authorize()
+                gmail.authorize(replace_existing=args.replace_existing)
                 print("Gmail read-only OAuth token stored in macOS Keychain")
             elif args.gmail_command == "search":
                 _print_candidates(gmail.search(args.query, args.limit))
@@ -465,7 +448,7 @@ def main() -> None:
         elif args.command == "backup":
             backup = GoogleDriveBackupAuth(config, keychain)
             if args.backup_command == "auth":
-                backup.authorize()
+                backup.authorize(replace_existing=args.replace_existing)
                 print("Google Drive OAuth token stored in macOS Keychain")
             elif args.backup_command == "status":
                 backup.token_data()

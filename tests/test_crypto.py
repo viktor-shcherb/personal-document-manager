@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from pdocs.config import SecurityConfig
 from pdocs.crypto import GpgSymmetricCipher
 
 
@@ -13,7 +13,20 @@ class StaticSecrets:
     def get(self, service: str, account: str) -> str:
         return "test-only-passphrase"
 
-    def set(self, service: str, account: str, value: str) -> None:
+    def get_optional(self, service: str, account: str) -> str | None:
+        return self.get(service, account)
+
+    def create(self, service: str, account: str, value: str) -> None:
+        raise NotImplementedError
+
+    def replace(
+        self,
+        service: str,
+        account: str,
+        value: str,
+        *,
+        expected: str,
+    ) -> None:
         raise NotImplementedError
 
 
@@ -25,11 +38,14 @@ def test_gpg_round_trip_with_lossless_compression(tmp_path: Path):
     source.write_bytes(b"Subject: Example\n\n" + b"compressible text\n" * 10000)
 
     cipher = GpgSymmetricCipher(
-        SecurityConfig(
-            cipher="gpg-symmetric",
-            keychain_service="test",
-            repository_key_account="test",
-            gpg_binary="gpg",
+        SimpleNamespace(
+            deployment=SimpleNamespace(
+                id="00000000-0000-4000-8000-000000000001",
+            ),
+            security=SimpleNamespace(
+                cipher="gpg-symmetric",
+                gpg_binary="gpg",
+            ),
         ),
         StaticSecrets(),
     )

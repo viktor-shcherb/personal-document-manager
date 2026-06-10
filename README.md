@@ -29,7 +29,8 @@ packages, general downloads, or an entire mailbox.
 ## Integrations
 
 - **Apple Keychain** keeps encryption credentials and Google authorization
-  tokens outside the document repository.
+  tokens outside the document repository. New items are create-only, and
+  updates require collision checks against the value previously read.
 - **Gmail** provides read-only discovery of potentially important messages and
   preserves selected emails in their original form.
 - **Git and private GitHub** store encrypted records and retain previous
@@ -40,6 +41,8 @@ packages, general downloads, or an entire mailbox.
   maintenance, verification, and recovery workflows.
 
 The current implementation is designed for macOS and Google accounts.
+Each deployment has a required UUID that isolates its encryption, Gmail, and
+Drive entries in Apple Keychain.
 
 ## Typical Use Cases
 

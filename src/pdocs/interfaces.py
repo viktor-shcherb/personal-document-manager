@@ -8,7 +8,18 @@ from typing import Protocol
 class SecretStore(Protocol):
     def get(self, service: str, account: str) -> str: ...
 
-    def set(self, service: str, account: str, value: str) -> None: ...
+    def get_optional(self, service: str, account: str) -> str | None: ...
+
+    def create(self, service: str, account: str, value: str) -> None: ...
+
+    def replace(
+        self,
+        service: str,
+        account: str,
+        value: str,
+        *,
+        expected: str,
+    ) -> None: ...
 
 
 class Cipher(Protocol):

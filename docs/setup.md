@@ -46,7 +46,28 @@ cp config/profile.example.toml ~/.config/pdocs/config.toml
 chmod 600 ~/.config/pdocs/config.toml
 ```
 
+Generate a unique deployment ID:
+
+```bash
+deployment_id="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+sed -i '' "s/REPLACE-WITH-UUID/$deployment_id/" \
+  ~/.config/pdocs/config.toml
+```
+
 Edit the paths, Google account, and taxonomy for the user.
+
+The deployment UUID is not a secret. PDM derives separate Keychain addresses
+from it:
+
+```text
+pdocs.repository-encryption  DEPLOYMENT_UUID
+pdocs.gmail-oauth            DEPLOYMENT_UUID:GOOGLE_ACCOUNT
+pdocs.google-drive-oauth     DEPLOYMENT_UUID:GOOGLE_ACCOUNT
+```
+
+Generate a new UUID for every PDM instance. Even if a configuration is copied
+with the same UUID, create-only writes prevent it from silently replacing an
+existing Keychain item.
 
 ## 3. Create The Encryption Secret
 
@@ -58,6 +79,11 @@ This generates a high-entropy passphrase and stores it in macOS Keychain. The
 command does not print it. The installed `pdocs` runtime is granted access so
 routine agent operations do not require repeated password prompts.
 
+`secrets init` never replaces an existing Keychain item and has no force
+option. If the derived `(service, account)` pair already exists, determine
+which deployment owns it and assign a new deployment UUID rather than
+overwriting it.
+
 Create one independent offline recovery copy. Do not place that copy in either
 Git repository.
 
@@ -67,8 +93,10 @@ If an older installation prompts for the login password on every command, run:
 pdocs secrets repair-access
 ```
 
-This may require one final password approval. It preserves the encryption
-secret. Do not use `secrets init --force` after records exist.
+This may require one final password approval. Before touching the original
+item, the command creates and verifies a temporary Keychain recovery item. It
+removes that backup only after the recreated original has been read back and
+verified.
 
 ## 4. Create The Private Vault
 

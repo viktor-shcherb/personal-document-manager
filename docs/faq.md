@@ -122,6 +122,40 @@ Commands do not print refresh tokens.
 
 ## Apple Keychain
 
+### How are accidental Keychain overwrites prevented?
+
+PDM treats the Keychain `(service, account)` pair as a secret's address and
+uses these safeguards:
+
+- first-time secret and token writes are create-only and fail if the item exists
+- every deployment has a required UUID that namespaces all Keychain accounts
+- encryption, Gmail, and Drive use separate fixed Keychain services
+- encryption secrets are never replaced in place and initialization has no
+  force option
+- automatic OAuth refresh uses compare-before-replace against the token it read
+- interactive OAuth replacement requires an explicit `--replace-existing` flag
+- access repair makes and verifies a temporary Keychain recovery item before
+  deleting the original, then verifies the recreated original before cleanup
+
+Generate a new `[deployment].id` UUID for every PDM instance. Copying a
+configuration also copies its identity, so change the UUID before initializing
+the copied deployment.
+
+### How do I deliberately reauthorize Google?
+
+Normal `pdocs gmail auth` and `pdocs backup auth` commands refuse to overwrite
+an existing token. After confirming the deployment UUID and configured account,
+use:
+
+```bash
+pdocs gmail auth --replace-existing
+pdocs backup auth --replace-existing
+```
+
+The replacement is accepted only if the Keychain value still matches the value
+read before browser authorization. A concurrent or unexpected change aborts
+the update.
+
 ### Why did `pdocs` ask for my login password repeatedly?
 
 Older versions created the Keychain item through `/usr/bin/security`, which
@@ -150,9 +184,14 @@ replacing them with repeated biometric prompts.
 
 ### Can I force-create a new encryption secret?
 
-Only before the vault contains records. `pdocs secrets init --force` refuses to
-run once `.pdoc` files exist because replacing the passphrase without
-re-encrypting every record would make the vault unreadable.
+No. `pdocs secrets init` has no force option. Replacing the passphrase without
+atomically re-encrypting and verifying every historical record can make the
+vault permanently unreadable.
+
+For a new vault, generate a new `[deployment].id` UUID and run
+`pdocs secrets init`. Existing vaults keep their original deployment UUID and
+secret; `pdocs secrets repair-access` changes access control without changing
+its value.
 
 ## Backups
 
