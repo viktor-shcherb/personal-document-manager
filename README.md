@@ -1,86 +1,124 @@
 # Personal Document Manager
 
-A small, agent-oriented toolkit for maintaining a private personal document
-repository.
+An agent-maintained system for organizing important personal documents without
+giving up privacy, history, or readable local access.
 
-It is designed around five practical properties:
+Give this repository to your coding agent. The agent can set up a private
+document vault, organize existing files, review incoming email, preserve
+important records, and keep the system backed up.
 
-1. Secrets stay in a system secret store, outside version control.
-2. Canonical records are encrypted before entering Git.
-3. Git preserves previous issues of replaceable records.
-4. A readable view of the latest commit is generated outside the repository.
-5. Each push replaces a verified full-history backup in Google Drive.
+## What It Manages
 
-The initial implementation supports:
+The system is intended for deliberate, long-lived personal records:
 
-- macOS Keychain for secrets
-- GnuPG symmetric encryption
-- Gmail read-only discovery and `.eml` export
-- a local Git repository with a private GitHub remote
-- Google Drive backup of complete Git history through GitHub Actions
-- a generated plaintext view of current records
-- a Codex-compatible skill for agent maintenance
+- identity documents and residence permits
+- education and professional qualifications
+- employment contracts, offers, decisions, and correspondence
+- insurance, tax, banking, and major-purchase records
+- household and housing documents
+- legal or administrative notices
+- important emails, including messages without attachments
 
-The interfaces remain replaceable, but this project does not include unused
-provider implementations.
+It distinguishes between documents where only the latest issue is normally
+needed and events that should remain permanently recorded. Older issues remain
+recoverable through version history.
 
-## Scope
+It is not intended to archive application data, logs, game saves, software
+packages, general downloads, or an entire mailbox.
 
-This project manages deliberate personal records such as identity documents,
-permits, education records, employment records, insurance, taxes, household
-records, and important correspondence.
+## Integrations
 
-It is not:
+- **Apple Keychain** keeps encryption credentials and Google authorization
+  tokens outside the document repository.
+- **Gmail** provides read-only discovery of potentially important messages and
+  preserves selected emails in their original form.
+- **Git and private GitHub** store encrypted records and retain previous
+  versions.
+- **Google Drive** receives a verified backup of the complete repository
+  history after each push.
+- **Codex and compatible coding agents** perform setup, classification,
+  maintenance, verification, and recovery workflows.
 
-- a full mailbox backup
-- a password manager
-- a general filesystem organizer
-- an application-data or game-save backup
-- an enterprise document-management platform
+The current implementation is designed for macOS and Google accounts.
 
-## Repository Layout
+## Typical Use Cases
+
+### Keep the current document without losing the old one
+
+When a new passport, permit, policy, or contract is issued, your agent replaces
+the current copy. The previous issue remains recoverable from history.
+
+### Preserve consequential email
+
+Your agent can review Gmail for offers, approvals, rejections, notices,
+commitments, and disputes. Important messages can be retained even when they
+have no attachment.
+
+### Find the latest readable documents
+
+Encrypted records remain canonical, while a separate local folder contains a
+readable copy of the latest committed versions for normal use.
+
+### Recover after loss
+
+The private GitHub repository contains encrypted document history. Google Drive
+holds an independently restorable copy of that complete history. Recovery still
+requires the encryption secret or its offline recovery copy.
+
+## Set It Up With An Agent
+
+Start a coding agent on your Mac and give it this prompt:
 
 ```text
-config/profile.example.toml       Example deployment profile
-docs/interfaces.md                Extension boundaries
-docs/setup.md                     User setup
-docs/faq.md                       OAuth and operational troubleshooting
-docs/storage-format.md            Encrypted record format
-.github/actions/                  Reusable Google Drive backup action
-skills/manage-personal-documents/ Agent workflow
-src/pdocs/                        Local command-line tool
+Set up Personal Document Manager for me from:
+https://github.com/viktor-shcherb/personal-document-manager
+
+Read the repository documentation and handle the setup end to end. Before
+creating anything, ask me to confirm:
+- where the encrypted vault, temporary inbox, and readable documents should live
+- which document categories I want managed
+- which Gmail account, private GitHub repository, and Google Drive account to use
+
+Keep all secrets outside version control. Explain any browser authorization or
+recovery step that requires my direct action. Test document import, replacement,
+readable-view generation, GitHub synchronization, Google Drive backup, and
+recovery using fake documents before importing my real files.
 ```
 
-## Quick Start
+The agent should follow [the setup guide](docs/setup.md) and install the
+included [document-management skill](skills/manage-personal-documents/SKILL.md).
 
-Read [docs/setup.md](docs/setup.md). After setup, the routine workflow is:
+## What Requires Your Attention
 
-```bash
-pdocs check
-pdocs gmail scan
-pdocs gmail show MESSAGE_ID
-pdocs gmail thread THREAD_ID
-pdocs gmail export MESSAGE_ID
-pdocs record add FILE --id employment/example/contract \
-  --title "Employment contract" \
-  --domain employment \
-  --owner self \
-  --lifecycle replaceable
-git add records
-git commit -m "Update employment contract"
-git push
-pdocs view build
-```
+Most setup and maintenance can be handled by the agent. You still need to:
 
-The vault's push workflow creates and verifies a complete Git bundle, then
-replaces one stable app-managed file in Google Drive. See
-[docs/backups.md](docs/backups.md).
+- approve Google and GitHub authorization in the browser
+- confirm which documents and email categories are in scope
+- keep one offline recovery copy of the encryption secret
+- approve destructive or ownership-changing operations
 
-## Security Boundary
+The agent should never display or commit encryption keys, OAuth tokens,
+recovery material, inbox contents, or readable copies.
 
-The encrypted Git repository is canonical. The inbox and readable view contain
-plaintext and must remain outside that repository. Commands never print
-encryption passphrases or OAuth refresh tokens.
+## Privacy Model
+
+Documents are encrypted before entering GitHub or Google Drive. The plaintext
+inbox and readable view remain local and separate from the encrypted vault.
+
+Git metadata can still reveal record paths, repository names, and commit
+messages. Use neutral identifiers and avoid sensitive details in commit
+messages.
+
+Google email access is read-only. Google Drive access is limited to files the
+backup integration creates or explicitly uses.
+
+## Documentation
+
+- [Setup guide](docs/setup.md)
+- [Frequently asked questions](docs/faq.md)
+- [Backup and recovery](docs/backups.md)
+- [Security and extension boundaries](docs/interfaces.md)
+- [Encrypted storage format](docs/storage-format.md)
 
 ## License
 
