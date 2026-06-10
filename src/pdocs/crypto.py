@@ -59,7 +59,8 @@ class GpgSymmetricCipher:
                 capture_output=True,
             )
             if result.returncode:
-                raise CryptoError("GnuPG failed to encrypt the record")
+                detail = result.stderr.strip() or "no diagnostic output"
+                raise CryptoError(f"GnuPG failed to encrypt {destination}: {detail}")
             os.replace(temporary, destination)
         finally:
             temporary.unlink(missing_ok=True)
@@ -87,4 +88,5 @@ class GpgSymmetricCipher:
         )
         if result.returncode:
             destination.unlink(missing_ok=True)
-            raise CryptoError(f"GnuPG failed to decrypt {source}")
+            detail = result.stderr.strip() or "no diagnostic output"
+            raise CryptoError(f"GnuPG failed to decrypt {source}: {detail}")

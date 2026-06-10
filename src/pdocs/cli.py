@@ -6,6 +6,7 @@ import secrets as secret_generator
 import shutil
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 from .backup import GoogleDriveBackupAuth, install_backup_workflow
@@ -16,6 +17,7 @@ from .keychain import KeychainError, MacOSKeychain
 from .records import (
     add_record,
     extract_record,
+    iter_record_paths,
     list_records,
     read_metadata,
     record_path,
@@ -38,6 +40,35 @@ def _print_candidates(candidates) -> None:
             f"{candidate.reference}\t{candidate.received_at}\t"
             f"{candidate.sender}\t{candidate.subject}{attachment}"
         )
+
+
+def _validate_record_input(config: AppConfig, args) -> None:
+    domains = tuple(config.raw.get("taxonomy", {}).get("domains", ()))
+    if domains and args.domain not in domains:
+        allowed = ", ".join(domains)
+        raise ValueError(
+            f"Unknown domain {args.domain!r}; configured domains: {allowed}"
+        )
+    if args.issued_at:
+        try:
+            parsed = date.fromisoformat(args.issued_at)
+        except ValueError as error:
+            raise ValueError("Issue date must use YYYY-MM-DD") from error
+        if parsed.isoformat() != args.issued_at:
+            raise ValueError("Issue date must use YYYY-MM-DD")
+
+
+def _repair_keychain_access(
+    config: AppConfig,
+    keychain: MacOSKeychain,
+) -> None:
+    service = config.security.keychain_service
+    account = config.security.repository_key_account
+    value = keychain.get(service, account)
+    if not value:
+        raise RuntimeError("Repository encryption secret is empty")
+    keychain.delete(service, account)
+    keychain.set(service, account, value)
 
 
 def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
@@ -66,66 +97,139 @@ def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
         secret_status = "missing"
         errors.append("Repository encryption secret is missing")
     git_status = "not initialized"
+    git_changes = []
     if (config.paths.vault / ".git").exists():
         result = subprocess.run(
-            ["git", "status", "--short", "--branch"],
+            ["git", "status", "--short", "--branch", "--untracked-files=all"],
             cwd=config.paths.vault,
             text=True,
             capture_output=True,
         )
-        git_status = result.stdout.splitlines()[0] if result.stdout else "initialized"
+        lines = result.stdout.splitlines()
+        git_status = lines[0] if lines else "initialized"
+        git_changes = lines[1:]
+    else:
+        errors.append("Vault is not a Git repository")
     print(f"config: {config.path}")
     print(f"vault: {config.paths.vault}")
     print(f"inbox: {config.paths.inbox}")
     print(f"readable: {config.paths.readable}")
     print(f"encryption secret: {secret_status}")
     print(f"git: {git_status}")
+    if git_changes:
+        print(f"working tree: {len(git_changes)} change(s)")
+        for change in git_changes:
+            print(f"  {change}")
+    else:
+        print("working tree: clean")
     if errors:
+        sys.stdout.flush()
         for error in errors:
             print(f"error: {error}", file=sys.stderr)
         raise SystemExit(1)
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="pdocs")
+    parser = argparse.ArgumentParser(
+        prog="pdocs",
+        description="Maintain an encrypted, Git-versioned personal document vault.",
+    )
     parser.add_argument("--config", help="Path to deployment configuration")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("check")
+    commands.add_parser(
+        "check",
+        help="Validate configuration, encryption, paths, and Git state.",
+    )
 
-    secrets_parser = commands.add_parser("secrets")
+    secrets_parser = commands.add_parser(
+        "secrets",
+        help="Initialize or verify the vault encryption secret.",
+    )
     secrets_commands = secrets_parser.add_subparsers(
         dest="secrets_command", required=True
     )
-    init_secret = secrets_commands.add_parser("init")
-    init_secret.add_argument("--force", action="store_true")
-    secrets_commands.add_parser("status")
+    init_secret = secrets_commands.add_parser(
+        "init",
+        help="Generate and store a new vault encryption secret.",
+    )
+    init_secret.add_argument(
+        "--force",
+        action="store_true",
+        help="Replace the secret only when the vault contains no records.",
+    )
+    secrets_commands.add_parser(
+        "repair-access",
+        help="Reset Keychain access control without changing the secret.",
+    )
+    secrets_commands.add_parser(
+        "status",
+        help="Verify that the vault encryption secret is available.",
+    )
 
-    record_parser = commands.add_parser("record")
+    record_parser = commands.add_parser(
+        "record",
+        help="Add, inspect, list, or extract encrypted records.",
+    )
     record_commands = record_parser.add_subparsers(dest="record_command", required=True)
-    add = record_commands.add_parser("add")
-    add.add_argument("path", type=Path)
-    add.add_argument("--id", required=True)
-    add.add_argument("--title", required=True)
-    add.add_argument("--domain", required=True)
-    add.add_argument("--owner", required=True)
-    add.add_argument("--lifecycle", required=True, choices=["replaceable", "event"])
-    add.add_argument("--issued-at")
-    add.add_argument("--source-kind", default="local")
-    add.add_argument("--source-ref")
-    add.add_argument("--thread-ref")
-    add.add_argument("--notes")
-    record_commands.add_parser("list")
-    show = record_commands.add_parser("show")
-    show.add_argument("record_id")
-    extract = record_commands.add_parser("extract")
-    extract.add_argument("record_id")
-    extract.add_argument("--output", type=Path, required=True)
+    add = record_commands.add_parser(
+        "add",
+        help="Encrypt a source file as a new or replacement record.",
+    )
+    add.add_argument("path", type=Path, help="Original file to preserve.")
+    add.add_argument("--id", required=True, help="Stable slash-separated record ID.")
+    add.add_argument("--title", required=True, help="Human-readable record title.")
+    add.add_argument("--domain", required=True, help="Configured document domain.")
+    add.add_argument("--owner", required=True, help="Record owner identifier.")
+    add.add_argument(
+        "--lifecycle",
+        required=True,
+        choices=["replaceable", "event"],
+        help="Whether the stable slot may be replaced or is immutable.",
+    )
+    add.add_argument("--issued-at", help="Issue date, preferably YYYY-MM-DD.")
+    add.add_argument(
+        "--source-kind",
+        default="local",
+        help="Provenance type, such as local or gmail.",
+    )
+    add.add_argument("--source-ref", help="Source message or artifact reference.")
+    add.add_argument("--thread-ref", help="Source thread reference.")
+    add.add_argument("--notes", help="Short factual context.")
+    list_command = record_commands.add_parser(
+        "list",
+        help="List current record slots.",
+    )
+    list_command.add_argument(
+        "--json",
+        action="store_true",
+        help="Print complete record metadata as JSON.",
+    )
+    show = record_commands.add_parser(
+        "show",
+        help="Print complete metadata for one record.",
+    )
+    show.add_argument("record_id", help="Record ID to inspect.")
+    extract = record_commands.add_parser(
+        "extract",
+        help="Decrypt one original file to an explicit output path.",
+    )
+    extract.add_argument("record_id", help="Record ID to extract.")
+    extract.add_argument("--output", type=Path, required=True, help="Output path.")
 
-    view_parser = commands.add_parser("view")
+    view_parser = commands.add_parser(
+        "view",
+        help="Build the disposable plaintext view from committed records.",
+    )
     view_commands = view_parser.add_subparsers(dest="view_command", required=True)
-    view_commands.add_parser("build")
+    view_commands.add_parser(
+        "build",
+        help="Replace the readable view with records from Git HEAD.",
+    )
 
-    gmail_parser = commands.add_parser("gmail")
+    gmail_parser = commands.add_parser(
+        "gmail",
+        help="Discover, inspect, and export Gmail messages.",
+    )
     gmail_commands = gmail_parser.add_subparsers(dest="gmail_command", required=True)
     gmail_commands.add_parser("auth")
     search = gmail_commands.add_parser("search")
@@ -143,7 +247,10 @@ def build_parser() -> argparse.ArgumentParser:
     reviewed = gmail_commands.add_parser("reviewed")
     reviewed.add_argument("message_ids", nargs="+")
 
-    backup_parser = commands.add_parser("backup")
+    backup_parser = commands.add_parser(
+        "backup",
+        help="Authorize and install Google Drive Git-history backups.",
+    )
     backup_commands = backup_parser.add_subparsers(dest="backup_command", required=True)
     backup_commands.add_parser("auth")
     backup_commands.add_parser("status")
@@ -163,7 +270,18 @@ def main() -> None:
             cmd_check(config, keychain)
         elif args.command == "secrets":
             if args.secrets_command == "init":
-                if not args.force:
+                if args.force:
+                    if any(iter_record_paths(config.paths.vault)):
+                        raise RuntimeError(
+                            "Refusing to replace the encryption secret while "
+                            "records exist; use 'pdocs secrets repair-access' "
+                            "to fix repeated Keychain prompts"
+                        )
+                    keychain.delete(
+                        config.security.keychain_service,
+                        config.security.repository_key_account,
+                    )
+                else:
                     try:
                         keychain.get(
                             config.security.keychain_service,
@@ -181,19 +299,32 @@ def main() -> None:
                     config.security.repository_key_account,
                     secret_generator.token_urlsafe(48),
                 )
-                print("Repository encryption secret stored in macOS Keychain")
-            else:
+                print(
+                    "Repository encryption secret stored in macOS Keychain "
+                    "with access granted to this CLI runtime"
+                )
+            elif args.secrets_command == "status":
                 keychain.get(
                     config.security.keychain_service,
                     config.security.repository_key_account,
                 )
                 print("Repository encryption secret is available")
+            elif args.secrets_command == "repair-access":
+                _repair_keychain_access(config, keychain)
+                print(
+                    "Keychain access repaired without changing the repository "
+                    "encryption secret"
+                )
         elif args.command == "record":
             if args.record_command == "add":
+                _validate_record_input(config, args)
+                source_path = args.path.expanduser().resolve()
+                destination = record_path(config.paths.vault, args.id)
+                existed = destination.exists()
                 destination = add_record(
                     vault=config.paths.vault,
                     cipher=cipher,
-                    source_path=args.path.expanduser().resolve(),
+                    source_path=source_path,
                     record_id=args.id,
                     title=args.title,
                     domain=args.domain,
@@ -205,15 +336,35 @@ def main() -> None:
                     thread_reference=args.thread_ref,
                     notes=args.notes,
                 )
-                print(destination)
-            elif args.record_command == "list":
-                print(
-                    json.dumps(
-                        list_records(config.paths.vault, cipher),
-                        indent=2,
-                        ensure_ascii=False,
+                action = "Updated" if existed else "Added"
+                print(f"{action} {args.lifecycle} record: {args.id}")
+                print(f"source: {source_path}")
+                print(f"stored: {destination}")
+                if existed:
+                    print(
+                        "history: Git preserves the prior committed issue after "
+                        "this change is committed"
                     )
-                )
+            elif args.record_command == "list":
+                records = list_records(config.paths.vault, cipher)
+                if args.json:
+                    print(
+                        json.dumps(
+                            records,
+                            indent=2,
+                            ensure_ascii=False,
+                        )
+                    )
+                elif not records:
+                    print("No records found.")
+                else:
+                    print("ID\tLIFECYCLE\tISSUED\tOWNER\tTITLE")
+                    for record in records:
+                        print(
+                            f"{record['id']}\t{record['lifecycle']}\t"
+                            f"{record.get('issued_at') or '-'}\t"
+                            f"{record['owner']}\t{record['title']}"
+                        )
             elif args.record_command == "show":
                 print(
                     json.dumps(
@@ -226,21 +377,48 @@ def main() -> None:
                     )
                 )
             elif args.record_command == "extract":
-                print(
-                    extract_record(
-                        config.paths.vault,
-                        cipher,
-                        args.record_id,
-                        args.output.expanduser().resolve(),
-                    )
+                destination = extract_record(
+                    config.paths.vault,
+                    cipher,
+                    args.record_id,
+                    args.output.expanduser().resolve(),
                 )
+                print(f"Extracted record {args.record_id} to: {destination}")
         elif args.command == "view":
+            changes = subprocess.run(
+                [
+                    "git",
+                    "status",
+                    "--short",
+                    "--untracked-files=all",
+                    "--",
+                    "records",
+                ],
+                cwd=config.paths.vault,
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout.splitlines()
             count = build_view_from_head(
                 config.paths.vault,
                 config.paths.readable,
                 cipher,
             )
-            print(f"Materialized {count} records into {config.paths.readable}")
+            commit = subprocess.run(
+                ["git", "rev-parse", "--short=12", "HEAD"],
+                cwd=config.paths.vault,
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout.strip()
+            print(
+                f"Built readable view from commit {commit}: "
+                f"{count} record(s) -> {config.paths.readable}"
+            )
+            if changes:
+                print(f"warning: ignored {len(changes)} uncommitted record change(s):")
+                for change in changes:
+                    print(f"  {change}")
         elif args.command == "gmail":
             gmail = GmailSource(config, keychain)
             state = ReviewState(config.paths.state)
@@ -296,14 +474,14 @@ def main() -> None:
                 backup.configure_github(args.repository)
                 print(f"Google Drive backup secrets configured for {args.repository}")
             elif args.backup_command == "install-workflow":
-                print(
-                    install_backup_workflow(
-                        config.paths.vault,
-                        action_ref=args.action_ref,
-                        folder_name=config.backup.folder_name,
-                        force=args.force,
-                    )
+                destination = install_backup_workflow(
+                    config.paths.vault,
+                    action_ref=args.action_ref,
+                    folder_name=config.backup.folder_name,
+                    force=args.force,
                 )
+                print(f"Installed Google Drive backup workflow: {destination}")
+                print("next: commit and push the workflow in the private vault")
     except (KeyError, OSError, RuntimeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         raise SystemExit(1) from error

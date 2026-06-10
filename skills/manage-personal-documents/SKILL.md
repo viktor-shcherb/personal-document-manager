@@ -105,14 +105,19 @@ personal administration. Set ownership accurately and avoid broad sharing.
 
 After changes:
 
-1. Run `pdocs record list` and inspect changed records with
-   `pdocs record show RECORD_ID`.
+1. Run the compact `pdocs record list` and inspect changed records with
+   `pdocs record show RECORD_ID`. Use `pdocs record list --json` only when
+   complete metadata for every record is required.
 2. Check that Git contains only encrypted `.pdoc` records and non-secret policy
    files.
 3. Commit a concise description of the changed logical records.
 4. Push when the deployment policy enables automatic push.
 5. Confirm the configured Google Drive backup workflow succeeds.
 6. Run `pdocs view build` to materialize the newly committed `HEAD`.
+
+Read the commit identifier printed by `view build`. If it warns that
+uncommitted record changes were ignored, do not describe the readable view as
+containing those changes.
 
 Never add inbox files, readable files, OAuth material, recovery codes, or
 encryption keys to Git.

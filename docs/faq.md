@@ -100,6 +100,40 @@ the private vault repository.
 
 Commands do not print refresh tokens.
 
+## Apple Keychain
+
+### Why did `pdocs` ask for my login password repeatedly?
+
+Older versions created the Keychain item through `/usr/bin/security`, which
+trusted that utility rather than the installed `pdocs` runtime. Choosing
+one-time `Allow` caused another dialog for each new CLI process.
+
+Repair the access control without rotating the encryption secret:
+
+```bash
+pdocs secrets repair-access
+```
+
+The migration can require one final login-password approval. Subsequent
+commands from the same installed `pdocs` runtime should be prompt-free.
+
+### Can Keychain use Touch ID instead?
+
+The current agent-oriented mode grants the installed CLI ongoing access after
+initial provisioning. Requiring Touch ID for every retrieval would interrupt
+each agent command and unattended maintenance, so biometric-per-access mode is
+not currently implemented.
+
+Legacy login-keychain authorization dialogs request the account password rather
+than Touch ID. `repair-access` avoids those repeated dialogs instead of
+replacing them with repeated biometric prompts.
+
+### Can I force-create a new encryption secret?
+
+Only before the vault contains records. `pdocs secrets init --force` refuses to
+run once `.pdoc` files exist because replacing the passphrase without
+re-encrypting every record would make the vault unreadable.
+
 ## Backups
 
 ### Does Google Drive receive plaintext documents?

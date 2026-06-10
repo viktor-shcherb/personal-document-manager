@@ -50,7 +50,7 @@ A secret store must retrieve and update named values without printing them.
 
 Implemented:
 
-- macOS Keychain through `/usr/bin/security`
+- macOS Keychain through Security.framework
 
 Secrets include the repository encryption passphrase and Gmail OAuth token.
 Secret files and recovery material never enter Git.

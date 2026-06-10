@@ -55,10 +55,20 @@ pdocs secrets init
 ```
 
 This generates a high-entropy passphrase and stores it in macOS Keychain. The
-command does not print it.
+command does not print it. The installed `pdocs` runtime is granted access so
+routine agent operations do not require repeated password prompts.
 
 Create one independent offline recovery copy. Do not place that copy in either
 Git repository.
+
+If an older installation prompts for the login password on every command, run:
+
+```bash
+pdocs secrets repair-access
+```
+
+This may require one final password approval. It preserves the encryption
+secret. Do not use `secrets init --force` after records exist.
 
 ## 4. Create The Private Vault
 
