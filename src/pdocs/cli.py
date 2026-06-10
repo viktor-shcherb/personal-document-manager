@@ -412,7 +412,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--limit",
         type=int,
         default=100,
-        help="Maximum Gmail messages to inspect.",
+        help="Maximum Gmail messages to inspect; use 0 for all matches.",
     )
     source_folder = source_run_commands.add_parser(
         "folder",

@@ -41,3 +41,112 @@ def test_authorize_refuses_existing_token_before_opening_browser(
 
     with pytest.raises(GmailError, match="already exists"):
         GmailSource(config, ExistingSecrets()).authorize()
+
+
+class Request:
+    def __init__(self, value):
+        self.value = value
+
+    def execute(self):
+        return self.value
+
+
+class Messages:
+    def __init__(self):
+        self.list_calls = []
+
+    def list(self, **kwargs):
+        self.list_calls.append(kwargs)
+        if kwargs.get("pageToken") is None:
+            return Request(
+                {
+                    "messages": [{"id": "message-1"}],
+                    "nextPageToken": "next",
+                }
+            )
+        return Request({"messages": [{"id": "message-2"}]})
+
+    def get(self, **kwargs):
+        message_id = kwargs["id"]
+        return Request(
+            {
+                "id": message_id,
+                "threadId": f"thread-{message_id}",
+                "internalDate": "1781100000000",
+                "payload": {
+                    "headers": [
+                        {"name": "From", "value": "sender@example.com"},
+                        {"name": "Subject", "value": "Document"},
+                        {"name": "Date", "value": "Wed, 10 Jun 2026"},
+                    ],
+                    "parts": (
+                        [{"filename": "document.pdf"}]
+                        if message_id == "message-2"
+                        else []
+                    ),
+                },
+            }
+        )
+
+
+class Service:
+    def __init__(self):
+        self.messages_api = Messages()
+
+    def users(self):
+        return self
+
+    def messages(self):
+        return self.messages_api
+
+
+def test_search_paginates_all_messages_without_raw_downloads():
+    gmail = GmailSource(
+        SimpleNamespace(gmail=SimpleNamespace(account="user@example.com")),
+        ExistingSecrets(),
+    )
+    service = Service()
+    gmail._service = lambda: service
+
+    candidates = gmail.search("after:2022/06/10", limit=0)
+
+    assert [candidate.reference for candidate in candidates] == [
+        "message-1",
+        "message-2",
+    ]
+    assert candidates[0].has_attachments is False
+    assert candidates[1].has_attachments is True
+    assert len(service.messages_api.list_calls) == 2
+
+
+def test_search_rejects_negative_limit():
+    gmail = GmailSource(
+        SimpleNamespace(gmail=SimpleNamespace(account="user@example.com")),
+        ExistingSecrets(),
+    )
+
+    with pytest.raises(GmailError, match="zero or greater"):
+        gmail.search("after:2022/06/10", limit=-1)
+
+
+def test_execute_retries_rate_limits(monkeypatch: pytest.MonkeyPatch):
+    class RateLimitError(RuntimeError):
+        resp = SimpleNamespace(status=429)
+
+    class FlakyRequest:
+        def __init__(self):
+            self.calls = 0
+
+        def execute(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise RateLimitError
+            return {"ok": True}
+
+    request = FlakyRequest()
+    sleeps = []
+    monkeypatch.setattr("pdocs.gmail.time.sleep", sleeps.append)
+
+    assert GmailSource._execute(request) == {"ok": True}
+    assert request.calls == 2
+    assert sleeps == [1.5]

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import time
 from datetime import UTC, datetime
 from email import policy
 from email.parser import BytesParser
@@ -13,6 +14,7 @@ from .interfaces import SecretStore, SourceCandidate
 
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+RETRYABLE_STATUS_CODES = {429, 500, 503}
 
 
 class GmailError(RuntimeError):
@@ -105,20 +107,54 @@ class GmailSource:
         return build("gmail", "v1", credentials=self._credentials())
 
     @staticmethod
+    def _execute(request, *, attempts: int = 7):
+        for attempt in range(attempts):
+            try:
+                return request.execute()
+            except Exception as error:
+                status = getattr(getattr(error, "resp", None), "status", None)
+                if status not in RETRYABLE_STATUS_CODES or attempt == attempts - 1:
+                    raise
+                time.sleep(1.5 * (attempt + 1))
+        raise AssertionError("unreachable")
+
+    @staticmethod
     def _headers(message: dict) -> dict[str, str]:
         headers = message.get("payload", {}).get("headers", [])
         return {item["name"].lower(): item["value"] for item in headers}
 
+    @classmethod
+    def _has_attachments(cls, payload: dict) -> bool:
+        if payload.get("filename"):
+            return True
+        return any(cls._has_attachments(part) for part in payload.get("parts", ()))
+
     def search(self, query: str, limit: int = 50) -> list[SourceCandidate]:
+        if limit < 0:
+            raise GmailError("Gmail search limit must be zero or greater")
         service = self._service()
-        response = (
-            service.users()
-            .messages()
-            .list(userId="me", q=query, maxResults=limit)
-            .execute()
-        )
+        summaries = []
+        page_token = None
+        while limit == 0 or len(summaries) < limit:
+            remaining = limit - len(summaries) if limit else 500
+            request = (
+                service.users()
+                .messages()
+                .list(
+                    userId="me",
+                    q=query,
+                    maxResults=min(500, remaining),
+                    pageToken=page_token,
+                )
+            )
+            response = self._execute(request)
+            summaries.extend(response.get("messages", ()))
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+
         candidates = []
-        for summary in response.get("messages", []):
+        for summary in summaries:
             message = (
                 service.users()
                 .messages()
@@ -128,11 +164,9 @@ class GmailSource:
                     format="metadata",
                     metadataHeaders=["From", "Subject", "Date"],
                 )
-                .execute()
             )
+            message = self._execute(message)
             headers = self._headers(message)
-            raw = self._raw(message["id"])
-            parsed = BytesParser(policy=policy.default).parsebytes(raw)
             candidates.append(
                 SourceCandidate(
                     reference=message["id"],
@@ -146,20 +180,24 @@ class GmailSource:
                     .isoformat(),
                     sender=headers.get("from", ""),
                     subject=headers.get("subject", ""),
-                    has_attachments=any(parsed.iter_attachments()),
+                    has_attachments=self._has_attachments(message.get("payload", {})),
                 )
             )
         return candidates
 
-    def _raw(self, message_id: str) -> bytes:
-        message = (
+    def _raw_response(self, message_id: str) -> tuple[dict, bytes]:
+        request = (
             self._service()
             .users()
             .messages()
             .get(userId="me", id=message_id, format="raw")
-            .execute()
         )
-        return base64.urlsafe_b64decode(message["raw"])
+        response = self._execute(request)
+        return response, base64.urlsafe_b64decode(response["raw"])
+
+    def _raw(self, message_id: str) -> bytes:
+        _, raw = self._raw_response(message_id)
+        return raw
 
     def inspect(self, message_id: str) -> dict:
         raw = self._raw(message_id)
@@ -168,14 +206,12 @@ class GmailSource:
         content = body.get_content() if body else ""
         return {
             "message_id": message_id,
-            "thread_id": (
+            "thread_id": self._execute(
                 self._service()
                 .users()
                 .messages()
                 .get(userId="me", id=message_id, format="minimal")
-                .execute()
-                .get("threadId")
-            ),
+            ).get("threadId"),
             "from": message.get("From", ""),
             "to": message.get("To", ""),
             "date": message.get("Date", ""),
@@ -191,17 +227,17 @@ class GmailSource:
         }
 
     def inspect_thread(self, thread_id: str) -> list[dict]:
-        thread = (
+        request = (
             self._service()
             .users()
             .threads()
             .get(userId="me", id=thread_id, format="minimal")
-            .execute()
         )
+        thread = self._execute(request)
         return [self.inspect(message["id"]) for message in thread.get("messages", [])]
 
     def export(self, message_id: str) -> Path:
-        raw = self._raw(message_id)
+        response, raw = self._raw_response(message_id)
         message = BytesParser(policy=policy.default).parsebytes(raw)
         destination = self.config.paths.inbox / "email" / message_id
         destination.mkdir(parents=True, exist_ok=True)
@@ -222,15 +258,14 @@ class GmailSource:
             path.write_bytes(payload)
             exported_attachments.append(str(path.relative_to(destination)))
 
-        details = self.inspect(message_id)
         source = {
             "source": "gmail",
             "message_id": message_id,
-            "thread_id": details["thread_id"],
-            "from": details["from"],
-            "to": details["to"],
-            "date": details["date"],
-            "subject": details["subject"],
+            "thread_id": response.get("threadId"),
+            "from": message.get("From", ""),
+            "to": message.get("To", ""),
+            "date": message.get("Date", ""),
+            "subject": message.get("Subject", ""),
             "attachments": exported_attachments,
         }
         (destination / "source.json").write_text(
