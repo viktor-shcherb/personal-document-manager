@@ -124,6 +124,18 @@ The OAuth client JSON stays outside Git. Authorize:
 pdocs gmail auth
 ```
 
+Google normally shows **Google hasn't verified this app** for a personal OAuth
+project that has not completed public verification. Before continuing, confirm:
+
+- the displayed app name is the one configured for this deployment
+- the displayed developer email belongs to the user who created the project
+- the requested permission is read-only Gmail access
+
+Then choose **Advanced** and **Go to _app name_ (unsafe)**. On this screen,
+“unsafe” means Google has not verified the OAuth publisher; it is not a reason
+to ignore a mismatched developer or unexpected permission. Stop if the app asks
+to send or delete email.
+
 The refresh token is stored in macOS Keychain.
 
 ### Google Drive backup
@@ -151,6 +163,10 @@ Authorize the separate Drive grant:
 pdocs backup auth
 pdocs backup status
 ```
+
+Apply the same identity checks if Google displays the unverified-app warning.
+The Drive grant must allow access only to files created or explicitly used by
+the app, not full Drive access.
 
 `Testing` mode is useful only during initial setup. Its refresh tokens expire
 after seven days, so it is unsuitable for unattended backups. See

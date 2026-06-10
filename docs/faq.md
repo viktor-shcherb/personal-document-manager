@@ -58,12 +58,32 @@ status. Gmail authorization can still display an unverified-app warning.
 
 ### How do I continue past the unverified-app warning?
 
-Confirm that the displayed app name and requested scope match the project you
-created. For Gmail, continue through Google's `Advanced` option only when the
-scope is exactly `gmail.readonly`.
+Google can display:
 
-Do not continue if the screen requests sending email, deleting email, or full
-Drive access.
+```text
+Google hasn't verified this app
+```
+
+This is expected when the user created the OAuth project for personal use and
+has not submitted it for public verification. Verify all of the following
+before proceeding:
+
+1. The app name matches the OAuth project configured for this deployment.
+2. The displayed developer email belongs to the user who created the project.
+3. Gmail requests only read-only access to messages and settings
+   (`gmail.readonly`).
+4. Drive requests only access to files created or explicitly used by the app
+   (`drive.file`).
+
+After those checks, select **Advanced**, then
+**Go to _app name_ (unsafe)**. Google's “unsafe” label on this page means the
+OAuth publisher is unverified. It does not override the identity and scope
+checks above.
+
+Do not continue if the developer email is unfamiliar, the app name is
+unexpected, or the screen requests sending email, deleting email, or full
+Drive access. Public or multi-user distribution requires a different security
+review and may require Google verification.
 
 ### I selected the wrong Drive scope. How do I correct it?
 

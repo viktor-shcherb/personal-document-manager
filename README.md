@@ -97,6 +97,13 @@ Most setup and maintenance can be handled by the agent. You still need to:
 - keep one offline recovery copy of the encryption secret
 - approve destructive or ownership-changing operations
 
+Personal Google OAuth apps that have not completed Google's public
+verification display a **Google hasn't verified this app** warning. This is
+expected for a self-owned deployment. Continue through **Advanced** only after
+confirming that the displayed developer is you and the requested permission is
+the documented Gmail read-only or Drive app-file scope. See the
+[OAuth FAQ](docs/faq.md#how-do-i-continue-past-the-unverified-app-warning).
+
 The agent should never display or commit encryption keys, OAuth tokens,
 recovery material, inbox contents, or readable copies.
 
