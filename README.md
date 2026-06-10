@@ -37,6 +37,9 @@ packages, general downloads, or an entire mailbox.
 - **Folder exchange** stages scans and files from local or synchronized folders
   and exports the latest committed readable view without deleting unrelated
   files.
+- **Remembered preferences** let the user resolve an ambiguous document or
+  organization once; encrypted rules guide future agents without repeated
+  questions.
 - **Git and private GitHub** store encrypted records and retain previous
   versions.
 - **Google Drive** receives a verified backup of the complete repository
@@ -60,6 +63,13 @@ the current copy. The previous issue remains recoverable from history.
 Your agent can review Gmail for offers, approvals, rejections, notices,
 commitments, and disputes. Important messages can be retained even when they
 have no attachment.
+
+### Teach the agent once
+
+When inclusion or organization is genuinely unclear, the agent recommends a
+choice and asks one focused question. The answer is stored as a narrow
+encrypted preference, so future documents of that kind are handled
+automatically.
 
 ### Find the latest readable documents
 
@@ -102,6 +112,9 @@ Most setup and maintenance can be handled by the agent. You still need to:
 
 - approve Google and GitHub authorization in the browser
 - confirm which documents and email categories are in scope
+- answer occasional consequential inclusion or organization questions; the
+  encrypted preference store prevents the agent from asking the same kind of
+  question repeatedly
 - keep one offline recovery copy of the encryption secret
 - approve destructive or ownership-changing operations
 
@@ -134,6 +147,7 @@ backup integration creates or explicitly uses.
 - [Backup and recovery](docs/backups.md)
 - [Incremental source ledger](docs/source-ledger.md)
 - [Folder exchange](docs/folder-exchange.md)
+- [Remembered decision preferences](docs/preferences.md)
 - [Security and extension boundaries](docs/interfaces.md)
 - [Encrypted storage format](docs/storage-format.md)
 

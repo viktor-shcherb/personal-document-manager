@@ -1,5 +1,15 @@
 # Record Policy
 
+## Judgment
+
+Use this policy and the existing vault structure without asking the user when
+the answer is clear. Ask only when a reasonable choice could materially affect
+retention, lifecycle, ownership, or future retrieval.
+
+Consult encrypted remembered preferences first. A specific user preference
+overrides these defaults unless it would retain credentials or other prohibited
+secret material.
+
 ## Retain
 
 Retain an item when it provides durable evidence of at least one of:
@@ -58,3 +68,14 @@ records with several owners.
 Preserve originals and report conflicts such as inconsistent dates,
 nationalities, names, addresses, or contract terms. Do not edit an issued
 document to correct it. Record corrections as new evidence.
+
+## Organization
+
+Choose domains and record IDs that match neighboring records. Prefer stable,
+plain, predictable hierarchy over clever categorization. Do not ask about
+capitalization, cosmetic filenames, or other reversible details.
+
+Ask for a preference when two plausible recurring structures would answer
+different user needs, such as organizing a family case by person versus case,
+or treating recurring statements as one replaceable slot versus dated events.
+Recommend the structure that best matches the document's lifecycle.

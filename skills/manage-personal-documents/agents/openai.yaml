@@ -1,4 +1,4 @@
 interface:
   display_name: "Manage Personal Documents"
-  short_description: "Run ledger-backed intake and maintain personal records"
-  default_prompt: "Use $manage-personal-documents to run incremental sources through the shared ledger, review new records, and maintain my encrypted personal document repository."
+  short_description: "Maintain records with remembered user preferences"
+  default_prompt: "Use $manage-personal-documents to apply my remembered inclusion and organization preferences, ask only about consequential ambiguity, run incremental sources, and maintain my encrypted personal document repository."

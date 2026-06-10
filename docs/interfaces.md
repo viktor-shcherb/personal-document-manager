@@ -61,6 +61,22 @@ Locks, failure reports, and the rebuildable index are local state outside Git.
 Agents pull before running a source and commit encrypted events with accepted
 records so another device can replay the same progress.
 
+## Preference Interface
+
+Agents persist user feedback as encrypted append-only events under
+`.pdocs/state/preferences/events/`. Effective rules cover inclusion decisions
+and organization defaults such as domain, owner, lifecycle, record ID prefix,
+and grouping guidance.
+
+The preference store does not classify documents itself. Agents inspect the
+effective structured rules, apply a narrow matching rule before general policy,
+and ask only about consequential ambiguity. Current direct user instructions
+override remembered rules.
+
+Remember and forget operations append events, so history is not silently
+rewritten. Preference payloads are encrypted because issuer names, household
+details, and filing habits can be sensitive.
+
 ## Secret Interface
 
 A secret store must retrieve named values without printing them. Initial writes
@@ -148,9 +164,10 @@ there are no unused implementations for other schedulers or storage providers.
 ## Policy Versus Mechanism
 
 Configuration controls paths, providers, domains, scan queries, and approval
-thresholds. Agent policy decides whether a candidate is a durable record, which
-record it supersedes, who owns it, and whether correspondence has evidentiary
-value.
+thresholds. Encrypted preferences record prior user decisions. Agent policy
+applies the most specific preference, then uses document policy and common
+sense to decide whether a candidate is durable, which record it supersedes,
+who owns it, and whether correspondence has evidentiary value.
 
 Backup failure does not alter the Git push that triggered it. It must remain
 visible as a failed GitHub Actions run and be retried before backup health is

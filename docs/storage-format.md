@@ -80,3 +80,21 @@ Resetting a source appends a reset event instead of rewriting history.
 
 The event payload is encrypted with the repository cipher. Local locks,
 failure reports, and the derived source index remain outside the vault.
+
+## Decision Preferences
+
+Reusable user feedback is stored as encrypted schema-1 events:
+
+```text
+.pdocs/state/preferences/events/<timestamp>_<event-id>.pdoc
+```
+
+A `remember` event contains a random rule ID, scope, narrow human-readable
+match, optional source qualifiers, and either an inclusion decision or
+organization defaults. A `forget` event retires a rule without deleting
+history.
+
+The effective preference set is derived by replaying events. Event filenames
+contain no preference details. The encrypted payload may contain sensitive
+issuer, household, or organization information and must be committed only in
+encrypted form.

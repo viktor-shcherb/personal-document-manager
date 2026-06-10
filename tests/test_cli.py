@@ -123,6 +123,42 @@ def test_parser_accepts_ledger_backed_source_commands():
     assert state.folder.as_posix() == "/tmp/exchange"
 
 
+def test_parser_accepts_inclusion_and_organization_preferences():
+    inclusion = build_parser().parse_args(
+        [
+            "preference",
+            "remember",
+            "inclusion",
+            "--match",
+            "monthly bank statements from Example Bank",
+            "--decision",
+            "add",
+            "--source-kind",
+            "gmail",
+        ]
+    )
+    organization = build_parser().parse_args(
+        [
+            "preference",
+            "remember",
+            "organization",
+            "--match",
+            "monthly bank statements",
+            "--domain",
+            "finance-insurance",
+            "--lifecycle",
+            "event",
+            "--id-prefix",
+            "finance-insurance/banking/statements",
+        ]
+    )
+
+    assert inclusion.preference_scope == "inclusion"
+    assert inclusion.decision == "add"
+    assert organization.preference_scope == "organization"
+    assert organization.lifecycle == "event"
+
+
 def test_source_run_output_tells_agent_to_commit_ledger(capsys):
     result = SimpleNamespace(
         source_key="gmail:documents:key",

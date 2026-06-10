@@ -15,6 +15,7 @@ from .crypto import GpgSymmetricCipher
 from .folder_exchange import export_view_to_folder, resolve_views_folder
 from .gmail import GmailSource
 from .keychain import MacOSKeychain
+from .preferences import PreferenceStore
 from .records import (
     add_record,
     extract_record,
@@ -265,6 +266,70 @@ def build_parser() -> argparse.ArgumentParser:
     )
     extract.add_argument("record_id", help="Record ID to extract.")
     extract.add_argument("--output", type=Path, required=True, help="Output path.")
+
+    preference_parser = commands.add_parser(
+        "preference",
+        help="Remember encrypted inclusion and organization decisions.",
+    )
+    preference_commands = preference_parser.add_subparsers(
+        dest="preference_command",
+        required=True,
+    )
+    preference_list = preference_commands.add_parser(
+        "list",
+        help="List effective remembered preferences.",
+    )
+    preference_list.add_argument(
+        "--scope",
+        choices=["inclusion", "organization"],
+    )
+    preference_list.add_argument("--json", action="store_true")
+    preference_show = preference_commands.add_parser(
+        "show",
+        help="Show one remembered preference.",
+    )
+    preference_show.add_argument("rule_id")
+    preference_remember = preference_commands.add_parser(
+        "remember",
+        help="Record a user decision as an encrypted reusable rule.",
+    )
+    preference_remember_commands = preference_remember.add_subparsers(
+        dest="preference_scope",
+        required=True,
+    )
+    preference_inclusion = preference_remember_commands.add_parser(
+        "inclusion",
+        help="Remember whether a narrowly described document kind is retained.",
+    )
+    preference_inclusion.add_argument("--match", required=True)
+    preference_inclusion.add_argument(
+        "--decision",
+        required=True,
+        choices=["add", "skip"],
+    )
+    preference_inclusion.add_argument("--instruction")
+    preference_inclusion.add_argument("--source-kind")
+    preference_inclusion.add_argument("--source-profile")
+    preference_organization = preference_remember_commands.add_parser(
+        "organization",
+        help="Remember how a narrowly described document kind is organized.",
+    )
+    preference_organization.add_argument("--match", required=True)
+    preference_organization.add_argument("--instruction")
+    preference_organization.add_argument("--domain")
+    preference_organization.add_argument("--owner")
+    preference_organization.add_argument(
+        "--lifecycle",
+        choices=["replaceable", "event"],
+    )
+    preference_organization.add_argument("--id-prefix")
+    preference_organization.add_argument("--source-kind")
+    preference_organization.add_argument("--source-profile")
+    preference_forget = preference_commands.add_parser(
+        "forget",
+        help="Append an encrypted event that retires a preference.",
+    )
+    preference_forget.add_argument("rule_id")
 
     view_parser = commands.add_parser(
         "view",
@@ -559,6 +624,50 @@ def main() -> None:
                     args.output.expanduser().resolve(),
                 )
                 print(f"Extracted record {args.record_id} to: {destination}")
+        elif args.command == "preference":
+            preferences = PreferenceStore(config.paths.vault, cipher)
+            if args.preference_command == "list":
+                rules = [
+                    rule.as_dict()
+                    for rule in preferences.rules().values()
+                    if not args.scope or rule.scope == args.scope
+                ]
+                if args.json:
+                    print(json.dumps(rules, indent=2, ensure_ascii=False))
+                elif not rules:
+                    print("No remembered preferences.")
+                else:
+                    print("ID\tSCOPE\tDECISION\tMATCH")
+                    for rule in rules:
+                        print(
+                            f"{rule['id']}\t{rule['scope']}\t"
+                            f"{rule.get('decision') or '-'}\t{rule['match']}"
+                        )
+            elif args.preference_command == "show":
+                rule = preferences.rule(args.rule_id)
+                if not rule:
+                    raise RuntimeError(f"Preference not found: {args.rule_id}")
+                print(json.dumps(rule.as_dict(), indent=2, ensure_ascii=False))
+            elif args.preference_command == "remember":
+                rule, destination = preferences.remember(
+                    scope=args.preference_scope,
+                    match=args.match,
+                    instruction=args.instruction,
+                    source_kind=args.source_kind,
+                    source_profile=args.source_profile,
+                    decision=getattr(args, "decision", None),
+                    domain=getattr(args, "domain", None),
+                    owner=getattr(args, "owner", None),
+                    lifecycle=getattr(args, "lifecycle", None),
+                    id_prefix=getattr(args, "id_prefix", None),
+                )
+                print(f"Remembered preference: {rule.rule_id}")
+                print(f"encrypted preference event: {destination}")
+                print("next: commit .pdocs/state/preferences/ to share this decision")
+            elif args.preference_command == "forget":
+                destination = preferences.forget(args.rule_id)
+                print(f"Forgot preference with encrypted event: {destination}")
+                print("next: commit .pdocs/state/preferences/ to share this change")
         elif args.command == "view":
             if args.view_command == "build":
                 changes = subprocess.run(

@@ -1,6 +1,6 @@
 ---
 name: manage-personal-documents
-description: Maintain an encrypted, Git-versioned personal document repository. Use when an agent needs to run incremental Gmail or folder intake through the shared source ledger, review local files or messages, preserve durable records, export committed readable views, or commit and push document updates.
+description: Maintain an encrypted, Git-versioned personal document repository. Use when an agent needs to run incremental Gmail or folder intake, apply remembered inclusion and organization preferences, resolve genuinely ambiguous records with minimal user interruption, export committed readable views, or commit and push document updates.
 ---
 
 # Manage Personal Documents
@@ -14,9 +14,11 @@ mailbox or filesystem mirror.
    `~/.config/pdocs/config.toml`.
 2. Run `pdocs check`.
 3. Read [references/record-policy.md](references/record-policy.md).
-4. Read [references/source-ledger.md](references/source-ledger.md) before
+4. Read [references/decision-preferences.md](references/decision-preferences.md)
+   and run `pdocs preference list`.
+5. Read [references/source-ledger.md](references/source-ledger.md) before
    running a recurring Gmail or folder source.
-5. Keep the configured vault, inbox, readable view, and exchange folders
+6. Keep the configured vault, inbox, readable view, and exchange folders
    separate.
 
 Never retrieve or print a secret directly. Use `pdocs` commands, which access
@@ -41,6 +43,46 @@ that establishes consequential facts.
 
 Ignore newsletters, marketing, routine notifications, casual discussion, and
 documents outside the configured managed scope.
+
+## Decide With Minimal Interruption
+
+Apply remembered preferences before the general record policy. When a matching
+inclusion rule says `add` or `skip`, follow it automatically without asking
+again. Apply matching organization rules to domain, owner, lifecycle, record
+ID hierarchy, and grouping.
+
+When no rule matches, use common sense and the existing vault structure. Do not
+ask about obvious durable records, obvious non-records, cosmetic naming, or
+minor folder choices. Inspect neighboring record IDs and choose the least
+surprising consistent organization.
+
+Ask one concise question only when uncertainty is consequential, such as
+whether a borderline document belongs in the managed scope, whether it is a
+replaceable current document or a historical event, who owns it, or which of
+two materially different recurring organizations the user prefers. State the
+recommended default and why.
+
+After the answer, immediately record a narrow reusable rule:
+
+```bash
+pdocs preference remember inclusion \
+  --match "NARROW DOCUMENT KIND AND ISSUER" \
+  --decision add \
+  --instruction "USER'S REUSABLE GUIDANCE"
+
+pdocs preference remember organization \
+  --match "NARROW DOCUMENT KIND" \
+  --domain DOMAIN \
+  --owner OWNER \
+  --lifecycle event \
+  --id-prefix "domain/category" \
+  --instruction "USER'S REUSABLE GROUPING GUIDANCE"
+```
+
+Tell the user what narrow rule was remembered. Future matching documents must
+be handled automatically unless facts conflict, safety policy applies, or the
+user says the answer was one-off. Never generalize one answer to unrelated
+issuers, people, document kinds, or legal contexts.
 
 ## Run Recurring Intake
 
@@ -135,14 +177,16 @@ After changes:
    `pdocs record show RECORD_ID`. Use `pdocs record list --json` only when
    complete metadata for every record is required.
 2. Check that Git contains only encrypted records, encrypted source-ledger
-   events, and non-secret policy files.
+   events, encrypted preference events, and non-secret policy files.
 3. For a successful recurring source run, commit both `records/` and
    `.pdocs/state/source-ledger/`. Do this even when only the ledger changed.
-4. Commit a concise description of the changed logical records or source
-   checkpoint.
-5. Push when the deployment policy enables automatic push.
-6. Confirm the configured Google Drive backup workflow succeeds.
-7. Run `pdocs view build` to materialize the newly committed `HEAD`.
+4. Commit `.pdocs/state/preferences/` whenever user feedback created or retired
+   a remembered rule.
+5. Commit a concise description of the changed logical records, source
+   checkpoint, or preference.
+6. Push when the deployment policy enables automatic push.
+7. Confirm the configured Google Drive backup workflow succeeds.
+8. Run `pdocs view build` to materialize the newly committed `HEAD`.
 
 Read the commit identifier printed by `view build`. If it warns that
 uncommitted record changes were ignored, do not describe the readable view as
@@ -163,6 +207,11 @@ workflow, and retry it before treating the repository as fully protected.
 Do not delete a record, rewrite ownership, or collapse ambiguous records
 without the approval required by deployment policy. Surface factual conflicts
 instead of silently choosing one version.
+
+Do not rewrite preference events manually. If the user changes a preference,
+use `pdocs preference forget RULE_ID`, commit that encrypted event, then
+remember the replacement. A current user instruction overrides an older
+preference.
 
 Do not edit or delete encrypted ledger events manually. The
 `pdocs source state reset` command appends a shared reset event and requires

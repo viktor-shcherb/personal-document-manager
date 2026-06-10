@@ -269,7 +269,24 @@ The event must still be committed when a successful run exports no items,
 because it advances the shared source window. See
 [source-ledger.md](source-ledger.md).
 
-## 8. Test The Document Workflow
+## 8. Configure Agent Decision Behavior
+
+The agent uses common sense and existing vault structure for clear cases. When
+inclusion or recurring organization is genuinely ambiguous, it asks one focused
+question with a recommendation and records the answer as an encrypted
+preference.
+
+Inspect effective preferences:
+
+```bash
+pdocs preference list
+```
+
+Remembered preference events are committed under
+`.pdocs/state/preferences/`. They contain no credentials, but their decrypted
+contents can be sensitive. See [preferences.md](preferences.md).
+
+## 9. Test The Document Workflow
 
 ```bash
 pdocs gmail search 'newer_than:7d'
