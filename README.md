@@ -44,6 +44,7 @@ It is not:
 config/profile.example.toml       Example deployment profile
 docs/interfaces.md                Extension boundaries
 docs/setup.md                     User setup
+docs/faq.md                       OAuth and operational troubleshooting
 docs/storage-format.md            Encrypted record format
 .github/actions/                  Reusable Google Drive backup action
 skills/manage-personal-documents/ Agent workflow

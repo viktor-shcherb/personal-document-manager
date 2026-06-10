@@ -46,7 +46,7 @@ cp config/profile.example.toml ~/.config/pdocs/config.toml
 chmod 600 ~/.config/pdocs/config.toml
 ```
 
-Edit the paths, Gmail account, and taxonomy for the user.
+Edit the paths, Google account, and taxonomy for the user.
 
 ## 3. Create The Encryption Secret
 
@@ -83,19 +83,30 @@ Run:
 pdocs check
 ```
 
-## 5. Configure Gmail OAuth
+## 5. Configure Google OAuth
 
-In Google Cloud Console:
+Use two Google Cloud projects and two desktop OAuth clients. This keeps the
+non-sensitive Drive grant separate from Gmail's restricted scope and makes
+Google's verification messages easier to interpret.
 
-1. Create a project.
+### Gmail intake
+
+1. Create a Google Cloud project for Gmail intake.
 2. Enable the Gmail API.
-3. Configure the Google Auth Platform for an external desktop application.
-4. Add only `https://www.googleapis.com/auth/gmail.readonly`.
-5. Add the user's Google account as a test user.
-6. Publish the app to production so offline refresh tokens do not expire after
-   seven days.
-7. Create an OAuth client of type `Desktop app`.
-8. Download the JSON file to the `oauth_client` path from the configuration.
+3. In Google Auth Platform, set the audience to `External`.
+4. Under Data Access, add exactly:
+
+   ```text
+   https://www.googleapis.com/auth/gmail.readonly
+   ```
+
+   It must appear under `Restricted scopes` as “View your email messages and
+   settings.”
+5. Add the intended Google account as a test user while configuring the app.
+6. Publish the app to `In production`. Do not submit a personal-use app for
+   verification merely because Google displays the verification notice.
+7. Create an OAuth client with application type `Desktop app`.
+8. Download its JSON file to the `[gmail].oauth_client` path.
 
 The OAuth client JSON stays outside Git. Authorize:
 
@@ -105,16 +116,24 @@ pdocs gmail auth
 
 The refresh token is stored in macOS Keychain.
 
-## 6. Configure Google Drive Backup
+### Google Drive backup
 
-In the same Google Cloud project:
+1. Create a separate Google Cloud project for Drive backup.
+2. Enable the Google Drive API.
+3. In Google Auth Platform, set the audience to `External`.
+4. Under Data Access, add exactly:
 
-1. Enable the Google Drive API.
-2. Add `https://www.googleapis.com/auth/drive.file` to the consent screen.
-3. Keep the user's Google account as an allowed user.
-4. Set the OAuth publishing status to `Production`. In `Testing`, refresh
-   tokens expire after seven days.
-5. Reuse the desktop OAuth client JSON configured in `[backup]`.
+   ```text
+   https://www.googleapis.com/auth/drive.file
+   ```
+
+   It must appear under `Non-sensitive scopes` as access only to the specific
+   Drive files used with the app. Do not select `.../auth/docs` or
+   `.../auth/drive`.
+5. Add the intended Google account as a test user while configuring the app.
+6. Publish the app to `In production`.
+7. Create an OAuth client with application type `Desktop app`.
+8. Download its JSON file to the `[backup].oauth_client` path.
 
 Authorize the separate Drive grant:
 
@@ -122,6 +141,13 @@ Authorize the separate Drive grant:
 pdocs backup auth
 pdocs backup status
 ```
+
+`Testing` mode is useful only during initial setup. Its refresh tokens expire
+after seven days, so it is unsuitable for unattended backups. See
+[FAQ](faq.md#google-oauth) for verification warnings, scope corrections, and
+authorization troubleshooting.
+
+## 6. Enable Google Drive Backup
 
 Copy the required values directly from Keychain into GitHub Actions secrets
 without printing them:

@@ -15,7 +15,7 @@ gpg_binary = "gpg"
 [gmail]
 enabled = true
 account = "you@example.com"
-oauth_client = "~/.config/pdocs/google-oauth-client.json"
+oauth_client = "~/.config/pdocs/google-gmail-oauth-client.json"
 token_service = "pdocs-google-oauth"
 scan_queries = [
   "newer_than:30d -category:promotions -category:social",
@@ -25,7 +25,7 @@ scan_queries = [
 enabled = true
 provider = "google-drive"
 account = "you@example.com"
-oauth_client = "~/.config/pdocs/google-oauth-client.json"
+oauth_client = "~/.config/pdocs/google-drive-oauth-client.json"
 token_service = "pdocs-google-drive-oauth"
 folder_name = "Personal Document Backups"
 
