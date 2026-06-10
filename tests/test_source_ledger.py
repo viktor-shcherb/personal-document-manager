@@ -9,14 +9,10 @@ from pdocs.source_ledger import SourceLedger
 class XorCipher:
     def seal(self, source: Path, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(
-            bytes(value ^ 0xA5 for value in source.read_bytes())
-        )
+        destination.write_bytes(bytes(value ^ 0xA5 for value in source.read_bytes()))
 
     def unseal(self, source: Path, destination: Path) -> None:
-        destination.write_bytes(
-            bytes(value ^ 0xA5 for value in source.read_bytes())
-        )
+        destination.write_bytes(bytes(value ^ 0xA5 for value in source.read_bytes()))
 
 
 def _complete(ledger: SourceLedger, key: str) -> Path:

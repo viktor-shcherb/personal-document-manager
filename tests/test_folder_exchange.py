@@ -87,9 +87,7 @@ def test_view_export_is_idempotent_and_prunes_only_managed_files(tmp_path: Path)
     assert first["changed"] > 0
     assert second["changed"] == 0
     assert (destination / "identity/document/document.txt").read_text() == "current"
-    metadata = json.loads(
-        (destination / "identity/document/metadata.json").read_text()
-    )
+    metadata = json.loads((destination / "identity/document/metadata.json").read_text())
     assert metadata["id"] == "identity/document"
 
     subprocess.run(["git", "rm", "-q", "-r", "records"], cwd=vault, check=True)

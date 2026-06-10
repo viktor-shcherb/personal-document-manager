@@ -593,16 +593,13 @@ def main() -> None:
                 )
                 if changes:
                     print(
-                        f"warning: ignored {len(changes)} "
-                        "uncommitted record change(s):"
+                        f"warning: ignored {len(changes)} uncommitted record change(s):"
                     )
                     for change in changes:
                         print(f"  {change}")
             elif args.view_command == "export":
                 profile = (
-                    config.sources.folder.get(args.profile)
-                    if not args.folder
-                    else None
+                    config.sources.folder.get(args.profile) if not args.folder else None
                 )
                 destination = resolve_views_folder(profile, args.folder)
                 for role, local in (
@@ -625,9 +622,7 @@ def main() -> None:
                     f"Exported {result['records']} record(s), "
                     f"{result['files']} managed file(s) -> {destination}"
                 )
-                print(
-                    f"changed: {result['changed']}; pruned: {result['pruned']}"
-                )
+                print(f"changed: {result['changed']}; pruned: {result['pruned']}")
         elif args.command == "source":
             ledger = SourceLedger(config.paths.vault, cipher)
             if args.source_command == "run":
@@ -653,9 +648,7 @@ def main() -> None:
                 _print_source_run(result)
             elif args.source_command == "state":
                 if args.source_state_command == "list":
-                    states = [
-                        state.as_dict() for state in ledger.states().values()
-                    ]
+                    states = [state.as_dict() for state in ledger.states().values()]
                     print(json.dumps(states, indent=2, ensure_ascii=False))
                 elif args.source_state_command in {"show", "reset"}:
                     if args.kind in {"email", "gmail"}:

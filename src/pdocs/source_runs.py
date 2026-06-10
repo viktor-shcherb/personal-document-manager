@@ -198,9 +198,7 @@ def run_gmail_source(
                 if candidate.reference in known_ids:
                     duplicates += 1
                     continue
-                destination = (
-                    config.paths.inbox / "email" / candidate.reference
-                )
+                destination = config.paths.inbox / "email" / candidate.reference
                 existed = destination.exists()
                 exported_path = gmail.export(candidate.reference)
                 content = exported_path / "message.eml"
@@ -215,7 +213,9 @@ def run_gmail_source(
                     batch = config.paths.inbox / "email"
                     all_hashes.add(digest)
                     source_manifest = exported_path / "source.json"
-                    source_data = json.loads(source_manifest.read_text(encoding="utf-8"))
+                    source_data = json.loads(
+                        source_manifest.read_text(encoding="utf-8")
+                    )
                     source_data.update(
                         {
                             "source_profile": profile.name,

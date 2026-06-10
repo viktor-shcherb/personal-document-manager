@@ -152,9 +152,7 @@ def _source_profiles(data: dict) -> SourcesConfig:
     for name, profile in sources.get("folder", {}).items():
         validate_source_profile_name(name)
         extensions = tuple(
-            extension.lower()
-            if extension.startswith(".")
-            else f".{extension.lower()}"
+            extension.lower() if extension.startswith(".") else f".{extension.lower()}"
             for extension in profile.get(
                 "extensions",
                 (".pdf", ".jpg", ".jpeg", ".png", ".heic"),

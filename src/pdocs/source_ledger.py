@@ -130,7 +130,9 @@ class SourceLedger:
             try:
                 event = json.loads(plaintext.read_text(encoding="utf-8"))
             except json.JSONDecodeError as error:
-                raise SourceLedgerError(f"Invalid source ledger event: {path}") from error
+                raise SourceLedgerError(
+                    f"Invalid source ledger event: {path}"
+                ) from error
         if event.get("schema") != 1:
             raise SourceLedgerError(f"Unsupported source ledger schema in {path}")
         return event

@@ -169,7 +169,9 @@ def _managed_files(root: Path) -> set[str]:
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
-        raise FolderExchangeError(f"Invalid folder export manifest: {manifest}") from error
+        raise FolderExchangeError(
+            f"Invalid folder export manifest: {manifest}"
+        ) from error
     if not isinstance(data, dict) or data.get("schema") != 1:
         raise FolderExchangeError(f"Unsupported folder export manifest: {manifest}")
     managed = set()
