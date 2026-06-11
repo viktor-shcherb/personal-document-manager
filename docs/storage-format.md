@@ -12,11 +12,11 @@ metadata.json
 content/<original filename>
 ```
 
-`metadata.json` uses schema version 1:
+`metadata.json` uses schema version 2:
 
 ```json
 {
-  "schema": 1,
+  "schema": 2,
   "id": "employment/example/contract",
   "title": "Employment contract",
   "domain": "employment",
@@ -35,11 +35,21 @@ content/<original filename>
     "filename": "contract.pdf",
     "media_type": "application/pdf",
     "sha256": "..."
+  },
+  "presentation": {
+    "name": "EPFL employment agreement",
+    "folder": "Employment"
   }
 }
 ```
 
-Unknown optional fields must be preserved by tools that rewrite a package.
+`presentation.name` is required for new records and is chosen explicitly by the
+importing agent. `presentation.folder` is optional and otherwise defaults to
+the descriptive document domain. These fields affect only the readable
+projection; they do not rename the preserved original, change the semantic
+title, or change the stable record ID. `pdocs record organize` updates them for
+both event and replaceable records. Unknown optional fields must be preserved
+by tools that rewrite a package.
 
 ## Repository Paths
 

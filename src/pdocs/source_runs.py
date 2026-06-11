@@ -70,7 +70,6 @@ def folder_profile(
             name=name,
             root=root,
             inbox=".",
-            views="Views",
             extensions=(".pdf", ".jpg", ".jpeg", ".png", ".heic"),
         )
     try:
@@ -107,8 +106,14 @@ def _validate_folder_source(config: AppConfig, folder: Path) -> None:
     protected = {
         "vault": config.paths.vault.resolve(),
         "local inbox": config.paths.inbox.resolve(),
-        "readable view": config.paths.readable.resolve(),
+        "local state": config.paths.state.resolve(),
     }
+    protected.update(
+        {
+            f"view {name!r}": target.path.resolve()
+            for name, target in config.views.targets.items()
+        }
+    )
     resolved = folder.resolve()
     for name, path in protected.items():
         if resolved == path or resolved in path.parents or path in resolved.parents:

@@ -193,6 +193,30 @@ For a new vault, generate a new `[deployment].id` UUID and run
 secret; `pdocs secrets repair-access` changes access control without changing
 its value.
 
+## Readable Views
+
+### Are the local view and iCloud export different?
+
+They are destinations of the same logical view. Every configured destination
+is generated from the same committed Git `HEAD` and contains the original
+record files, per-record metadata, and `INDEX.json`.
+
+Destinations differ only in location and synchronization behavior. PDM tracks
+the files it manages in each destination and preserves unrelated files.
+
+### Can views update automatically?
+
+Yes. On macOS:
+
+```bash
+pdocs view auto install
+```
+
+The per-user LaunchAgent checks at the configured interval and refreshes only
+when local Git `HEAD` differs from a destination's recorded commit. It never
+publishes uncommitted record changes. A commit made on another machine must be
+pulled locally before this machine can materialize it.
+
 ## Backups
 
 ### Does Google Drive receive plaintext documents?

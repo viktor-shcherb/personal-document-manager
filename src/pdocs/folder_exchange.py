@@ -4,12 +4,13 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .config import FolderSourceProfile
+from .config import FolderSourceProfile, ViewTargetConfig
 from .interfaces import Cipher
 from .records import sha256
 from .view import MARKER, build_view_from_head
@@ -45,20 +46,6 @@ def resolve_ingest_folder(
             "or pass --folder"
         )
     return profile.inbox_path()
-
-
-def resolve_views_folder(
-    profile: FolderSourceProfile | None,
-    override: Path | None,
-) -> Path:
-    if override:
-        return override.expanduser().resolve()
-    if not profile:
-        raise FolderExchangeError(
-            "Folder source profile is missing; configure [sources.folder.PROFILE] "
-            "or pass --folder"
-        )
-    return profile.views_path()
 
 
 def _is_hidden_or_temporary(relative: Path) -> bool:
@@ -162,17 +149,17 @@ def stage_folder_candidates(
     return batch, staged_items
 
 
-def _managed_files(root: Path) -> set[str]:
+def _managed_export(root: Path) -> tuple[set[str], str | None]:
     manifest = root / EXPORT_MANIFEST
     if not manifest.is_file():
-        return set()
+        return set(), None
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
         raise FolderExchangeError(
             f"Invalid folder export manifest: {manifest}"
         ) from error
-    if not isinstance(data, dict) or data.get("schema") != 1:
+    if not isinstance(data, dict) or data.get("schema") not in {1, 2}:
         raise FolderExchangeError(f"Unsupported folder export manifest: {manifest}")
     managed = set()
     for value in data.get("files", ()):
@@ -186,7 +173,10 @@ def _managed_files(root: Path) -> set[str]:
                 f"Unsafe managed path in folder export manifest: {value!r}"
             )
         managed.add(path.as_posix())
-    return managed
+    commit = data.get("commit") if data.get("schema") == 2 else None
+    if commit is not None and not isinstance(commit, str):
+        raise FolderExchangeError(f"Invalid commit in folder export manifest: {manifest}")
+    return managed, commit
 
 
 def _copy_if_changed(source: Path, destination: Path) -> bool:
@@ -221,37 +211,39 @@ def _managed_destination(root: Path, relative: str) -> Path:
     return destination
 
 
-def export_view_to_folder(
+def _git_head(vault: Path) -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=vault,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout.strip()
+
+
+def _sync_generated_view(
     *,
-    vault: Path,
+    generated: Path,
     destination: Path,
-    cipher: Cipher,
+    commit: str,
+    records: int,
     prune: bool = False,
 ) -> dict:
-    resolved_vault = vault.resolve()
     resolved_destination = destination.expanduser().resolve()
-    if (
-        resolved_destination == resolved_vault
-        or resolved_vault in resolved_destination.parents
-    ):
-        raise FolderExchangeError("Readable export folder must be outside the vault")
-
     destination = resolved_destination
     destination.mkdir(parents=True, exist_ok=True)
-    previous = _managed_files(destination)
-    with tempfile.TemporaryDirectory() as temporary_dir:
-        generated = Path(temporary_dir) / "view"
-        count = build_view_from_head(vault, generated, cipher)
-        current = {
-            path.relative_to(generated).as_posix()
-            for path in generated.rglob("*")
-            if path.is_file() and path.name != MARKER
-        }
-        changed = 0
-        for relative in sorted(current):
-            managed_destination = _managed_destination(destination, relative)
-            if _copy_if_changed(generated / relative, managed_destination):
-                changed += 1
+    previous, _ = _managed_export(destination)
+    current = {
+        path.relative_to(generated).as_posix()
+        for path in generated.rglob("*")
+        if path.is_file() and path.name != MARKER
+    }
+    changed = 0
+    for relative in sorted(current):
+        managed_destination = _managed_destination(destination, relative)
+        if _copy_if_changed(generated / relative, managed_destination):
+            changed += 1
 
     pruned = 0
     if prune:
@@ -274,7 +266,8 @@ def export_view_to_folder(
     temporary_manifest.write_text(
         json.dumps(
             {
-                "schema": 1,
+                "schema": 2,
+                "commit": commit,
                 "files": sorted(managed),
             },
             indent=2,
@@ -284,9 +277,121 @@ def export_view_to_folder(
     )
     temporary_manifest.replace(manifest)
     return {
-        "records": count,
+        "records": records,
         "files": len(current),
         "changed": changed,
         "pruned": pruned,
         "destination": str(destination),
+        "commit": commit,
+        "skipped": False,
     }
+
+
+def export_view_to_folder(
+    *,
+    vault: Path,
+    destination: Path,
+    cipher: Cipher,
+    prune: bool = False,
+) -> dict:
+    resolved_vault = vault.resolve()
+    resolved_destination = destination.expanduser().resolve()
+    if (
+        resolved_destination == resolved_vault
+        or resolved_vault in resolved_destination.parents
+    ):
+        raise FolderExchangeError("Readable export folder must be outside the vault")
+
+    commit = _git_head(vault)
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        generated = Path(temporary_dir) / "view"
+        records = build_view_from_head(vault, generated, cipher)
+        return _sync_generated_view(
+            generated=generated,
+            destination=destination,
+            commit=commit,
+            records=records,
+            prune=prune,
+        )
+
+
+def refresh_views(
+    *,
+    vault: Path,
+    targets: dict[str, ViewTargetConfig],
+    cipher: Cipher,
+    selected: set[str] | None = None,
+    force: bool = False,
+    protected_paths: dict[str, Path] | None = None,
+) -> list[dict]:
+    commit = _git_head(vault)
+    chosen = {
+        name: target
+        for name, target in targets.items()
+        if selected is None or name in selected
+    }
+    missing = sorted((selected or set()) - set(targets))
+    if missing:
+        raise FolderExchangeError(
+            f"Unknown view target(s): {', '.join(missing)}"
+        )
+
+    protected = {"vault": vault, **(protected_paths or {})}
+    chosen_items = list(chosen.items())
+    for index, (name, target) in enumerate(chosen_items):
+        destination = target.path.resolve()
+        for role, path in protected.items():
+            resolved = path.resolve()
+            if (
+                destination == resolved
+                or destination in resolved.parents
+                or resolved in destination.parents
+            ):
+                raise FolderExchangeError(
+                    f"View target {name!r} must not overlap {role}: {destination}"
+                )
+        for other_name, other in chosen_items[index + 1 :]:
+            other_path = other.path.resolve()
+            if (
+                destination == other_path
+                or destination in other_path.parents
+                or other_path in destination.parents
+            ):
+                raise FolderExchangeError(
+                    f"View targets {name!r} and {other_name!r} must not overlap"
+                )
+
+    results = []
+    pending = {}
+    for name, target in chosen.items():
+        managed, current_commit = _managed_export(target.path)
+        complete = all((target.path / relative).is_file() for relative in managed)
+        if not force and current_commit == commit and complete:
+            results.append(
+                {
+                    "name": name,
+                    "destination": str(target.path),
+                    "commit": commit,
+                    "skipped": True,
+                }
+            )
+        else:
+            pending[name] = target
+
+    if not pending:
+        return results
+
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        generated = Path(temporary_dir) / "view"
+        records = build_view_from_head(vault, generated, cipher)
+        for name, target in pending.items():
+            result = _sync_generated_view(
+                generated=generated,
+                destination=target.path,
+                commit=commit,
+                records=records,
+                prune=target.prune,
+            )
+            result["name"] = name
+            results.append(result)
+    return sorted(results, key=lambda item: item["name"])

@@ -59,6 +59,8 @@ def add_record(
     source_profile: str | None = None,
     source_key: str | None = None,
     notes: str | None = None,
+    view_name: str,
+    view_folder: str | None = None,
 ) -> Path:
     if lifecycle not in {"replaceable", "event"}:
         raise RecordError("Lifecycle must be replaceable or event")
@@ -76,7 +78,7 @@ def add_record(
             )
 
     metadata = {
-        "schema": 1,
+        "schema": 2,
         "id": record_id,
         "title": title,
         "domain": domain,
@@ -97,7 +99,12 @@ def add_record(
             or "application/octet-stream",
             "sha256": sha256(source_path),
         },
+        "presentation": {
+            "name": _validate_presentation_name(view_name),
+        },
     }
+    if view_folder is not None:
+        metadata["presentation"]["folder"] = _validate_presentation_folder(view_folder)
     if notes:
         metadata["notes"] = notes
 
@@ -114,6 +121,83 @@ def add_record(
             archive.add(source_path, arcname=f"content/{source_path.name}")
         cipher.seal(package, destination)
     return destination
+
+
+def _validate_presentation_name(name: str) -> str:
+    name = name.strip()
+    if not name or name in {".", ".."}:
+        raise RecordError("Readable filename must not be empty")
+    if any(character in name for character in ("/", "\\", "\0")):
+        raise RecordError("Readable filename must be a name, not a path")
+    return name
+
+
+def _validate_presentation_folder(folder: str) -> str:
+    folder = folder.strip()
+    path = Path(folder)
+    if (
+        not folder
+        or path.is_absolute()
+        or any(part in {"", ".", ".."} or part.startswith(".") for part in path.parts)
+    ):
+        raise RecordError(
+            "Readable folder must be a non-hidden relative path without '..'"
+        )
+    return path.as_posix()
+
+
+def organize_record(
+    *,
+    vault: Path,
+    cipher: Cipher,
+    record_id: str,
+    name: str | None = None,
+    folder: str | None = None,
+    clear_folder: bool = False,
+) -> dict:
+    encrypted = record_path(vault, record_id)
+    if not encrypted.exists():
+        raise RecordError(f"Record not found: {record_id}")
+    if folder is not None and clear_folder:
+        raise RecordError("Cannot set and clear the readable folder together")
+    if not any((name is not None, folder is not None, clear_folder)):
+        raise RecordError("Specify a readable filename or folder change")
+
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        temporary = Path(temporary_dir)
+        unpacked = temporary / "unpacked"
+        metadata = unpack_record(encrypted, cipher, unpacked)
+        presentation = metadata.get("presentation", {})
+        if not isinstance(presentation, dict):
+            raise RecordError(f"Invalid presentation metadata: {record_id}")
+        presentation = dict(presentation)
+
+        if name is not None:
+            presentation["name"] = _validate_presentation_name(name)
+        if clear_folder:
+            presentation.pop("folder", None)
+        elif folder is not None:
+            presentation["folder"] = _validate_presentation_folder(folder)
+
+        if "name" not in presentation:
+            raise RecordError(
+                "Record has no explicit readable filename; set --name"
+            )
+        metadata["schema"] = 2
+        metadata["presentation"] = presentation
+
+        metadata_path = unpacked / "metadata.json"
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        package = temporary / "record.tar"
+        content = unpacked / "content" / metadata["content"]["filename"]
+        with tarfile.open(package, "w") as archive:
+            archive.add(metadata_path, arcname="metadata.json")
+            archive.add(content, arcname=f"content/{content.name}")
+        cipher.seal(package, encrypted)
+    return metadata
 
 
 def _safe_extract(archive: tarfile.TarFile, destination: Path) -> None:

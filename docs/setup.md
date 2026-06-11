@@ -33,11 +33,11 @@ Choose distinct local paths:
 ```text
 vault     encrypted canonical Git repository
 inbox     temporary plaintext intake
-readable  generated plaintext latest view
-exchange  optional folder intake and readable export
+views     generated plaintext projections of committed records
+exchange  optional folder intake
 ```
 
-The inbox, readable, and exchange paths must not be inside the vault.
+The inbox, view, and exchange paths must not be inside the vault.
 
 Copy the example configuration:
 
@@ -302,6 +302,7 @@ pdocs record add \
   "$HOME/Documents/Personal Documents Inbox/email/MESSAGE_ID/message.eml" \
   --id "employment/example/correspondence/2026-06-10-offer" \
   --title "Employment offer" \
+  --view-name "Example employer offer acceptance" \
   --domain employment \
   --owner self \
   --lifecycle event \
@@ -311,24 +312,40 @@ pdocs record add \
   --source-key SOURCE_KEY
 ```
 
-Commit the encrypted record, then generate the readable view from that commit:
+Commit the encrypted record, then refresh every readable destination from that
+commit:
 
 ```bash
 git add records
 git commit -m "Add employment offer"
 git push
-pdocs view build
+pdocs view refresh
 ```
 
-Export the committed view to the configured folder transport:
+Install automatic refresh on macOS:
 
 ```bash
-pdocs view export folder --profile iphone
+pdocs view auto install
+pdocs view auto status
 ```
 
-Use `--prune` only when stale files previously managed by PDM should be
-removed. Unrelated files are always preserved. See
-[folder-exchange.md](folder-exchange.md).
+The agent checks the local committed `HEAD` at the configured interval and
+skips work when every destination is current. Unrelated files are always
+preserved. See [folder-exchange.md](folder-exchange.md).
+
+Readable documents use descriptive titles under a small set of domain folders.
+Issue dates remain in hidden metadata and `INDEX.json` unless needed to
+distinguish recurring documents. Improve a downstream name or folder
+persistently with:
+
+```bash
+pdocs record organize RECORD_ID \
+  --name "More descriptive filename" \
+  --folder "Employment"
+```
+
+Commit the changed encrypted record; automatic refresh then renames it in every
+view destination.
 
 ## Recovery
 

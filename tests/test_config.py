@@ -25,8 +25,13 @@ id = "{deployment_id}"
 [paths]
 vault = "{path.parent / "vault"}"
 inbox = "{path.parent / "inbox"}"
-readable = "{path.parent / "readable"}"
 state = "{path.parent / "state"}"
+
+[views]
+refresh_interval_seconds = 300
+
+[views.local]
+path = "{path.parent / "readable"}"
 
 [security]
 gpg_binary = "gpg"
@@ -91,8 +96,11 @@ overlap_window = "48h"
 [sources.folder.iphone]
 root = "{tmp_path / "exchange"}"
 inbox = "Incoming"
-views = "Readable"
 extensions = ["PDF", ".HEIC"]
+
+[views.icloud]
+path = "{tmp_path / "exchange/Readable"}"
+prune = true
 """,
         encoding="utf-8",
     )
@@ -102,8 +110,9 @@ extensions = ["PDF", ".HEIC"]
     assert config.sources.gmail["documents"].initial_window == "60d"
     folder = config.sources.folder["iphone"]
     assert folder.inbox_path() == (tmp_path / "exchange/Incoming")
-    assert folder.views_path() == (tmp_path / "exchange/Readable")
     assert folder.extensions == (".pdf", ".heic")
+    assert config.views.targets["icloud"].path == (tmp_path / "exchange/Readable")
+    assert config.views.targets["icloud"].prune is True
 
 
 def test_config_rejects_folder_path_outside_source_root(tmp_path: Path):

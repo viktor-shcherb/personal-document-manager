@@ -8,7 +8,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from pdocs.config import FolderSourceProfile, GmailSourceProfile, SourcesConfig
+from pdocs.config import (
+    FolderSourceProfile,
+    GmailSourceProfile,
+    SourcesConfig,
+    ViewTargetConfig,
+    ViewsConfig,
+)
 from pdocs.interfaces import SourceCandidate
 from pdocs.source_ledger import SourceLedger, SourceLedgerError
 from pdocs.source_runs import run_folder_source, run_gmail_source
@@ -29,7 +35,6 @@ def _config(tmp_path: Path):
         paths=SimpleNamespace(
             vault=tmp_path / "vault",
             inbox=tmp_path / "local-inbox",
-            readable=tmp_path / "readable",
             state=tmp_path / "local-state",
         ),
         gmail=SimpleNamespace(account="user@example.com"),
@@ -47,8 +52,17 @@ def _config(tmp_path: Path):
                     name="iphone",
                     root=exchange,
                     inbox="Inbox",
-                    views="Views",
                     extensions=(".pdf", ".jpg"),
+                )
+            },
+        ),
+        views=ViewsConfig(
+            refresh_interval_seconds=300,
+            targets={
+                "local": ViewTargetConfig(
+                    name="local",
+                    path=tmp_path / "readable",
+                    prune=True,
                 )
             },
         ),

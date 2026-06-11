@@ -50,9 +50,31 @@ pdocs preference remember organization \
   --instruction "Group by calendar year."
 ```
 
-The record ID hierarchy determines the generated readable folder hierarchy.
+The record ID hierarchy remains the stable semantic organization inside the
+encrypted vault. The readable view is flatter: it defaults to one descriptive
+domain folder and uses the explicit filename selected by the importing agent.
 Agents should inspect neighboring record IDs and use existing conventions
 before asking for a new preference.
+
+Deeper readable folders remain available for a coherent property, legal case,
+or other dossier where grouping materially helps retrieval. Avoid folders that
+only restate a filename, issuer, document type, or non-semantic issue date.
+
+The importing agent must choose an explicit `--view-name` for every document.
+Use a stable descriptive title and store the issue date in `issued_at`. Do not
+put a date in a title or view name merely because the document was issued that
+day. A date or period may remain when it is part of the document's identity,
+such as a tax year or payslip month. Duplicate readable names fail refresh and
+must be resolved by the agent.
+
+If a better presentation is discovered after intake, persist it without
+changing the semantic record ID:
+
+```bash
+pdocs record organize RECORD_ID \
+  --name "Descriptive filename" \
+  --folder "Finance, Tax and Banking"
+```
 
 ## Inspect And Change Preferences
 

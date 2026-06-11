@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import secrets as secret_generator
 import shutil
 import subprocess
@@ -12,7 +13,7 @@ from pathlib import Path
 from .backup import GoogleDriveBackupAuth, install_backup_workflow
 from .config import AppConfig, load_config, repository_secret_locator
 from .crypto import GpgSymmetricCipher
-from .folder_exchange import export_view_to_folder, resolve_views_folder
+from .folder_exchange import refresh_views
 from .gmail import GmailSource
 from .keychain import MacOSKeychain
 from .preferences import PreferenceStore
@@ -20,6 +21,7 @@ from .records import (
     add_record,
     extract_record,
     list_records,
+    organize_record,
     read_metadata,
     record_path,
 )
@@ -33,7 +35,11 @@ from .source_runs import (
     run_folder_source,
     run_gmail_source,
 )
-from .view import build_view_from_head
+from .view_automation import (
+    install_launch_agent,
+    launch_agent_label,
+    launch_agent_path,
+)
 
 
 def _runtime(config_path: str | None):
@@ -109,13 +115,35 @@ def _initialize_repository_secret(
     )
 
 
+def _run_launchctl(arguments: list[str]) -> subprocess.CompletedProcess:
+    result = subprocess.run(
+        ["launchctl", *arguments],
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode:
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"launchctl failed: {detail}")
+    return result
+
+
+def _launch_agent_target(config: AppConfig) -> str:
+    return f"gui/{os.getuid()}/{launch_agent_label(config)}"
+
+
 def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
     errors = []
     configured_paths = {
         "vault": config.paths.vault,
         "inbox": config.paths.inbox,
-        "readable": config.paths.readable,
+        "state": config.paths.state,
     }
+    configured_paths.update(
+        {
+            f"view {name!r}": target.path
+            for name, target in config.views.targets.items()
+        }
+    )
     path_items = list(configured_paths.items())
     for index, (left_name, left) in enumerate(path_items):
         for right_name, right in path_items[index + 1 :]:
@@ -124,22 +152,13 @@ def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
                     f"{left_name} and {right_name} paths must be separate and non-nested"
                 )
     for name, profile in config.sources.folder.items():
-        external_paths = {
-            "inbox": profile.inbox_path(),
-            "views": profile.views_path(),
-        }
-        if _paths_overlap(external_paths["inbox"], external_paths["views"]):
-            errors.append(
-                f"folder source {name!r} inbox and views must be separate "
-                "and non-nested"
-            )
-        for role, external in external_paths.items():
-            for local_role, local in configured_paths.items():
-                if _paths_overlap(external, local):
-                    errors.append(
-                        f"folder source {name!r} {role} must not overlap "
-                        f"the configured {local_role} path"
-                    )
+        external = profile.inbox_path()
+        for local_role, local in configured_paths.items():
+            if _paths_overlap(external, local):
+                errors.append(
+                    f"folder source {name!r} inbox must not overlap "
+                    f"the configured {local_role} path"
+                )
     if not shutil.which(config.security.gpg_binary):
         errors.append(f"GnuPG binary not found: {config.security.gpg_binary}")
     locator = repository_secret_locator(config)
@@ -167,7 +186,10 @@ def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
     print(f"deployment: {config.deployment.id}")
     print(f"vault: {config.paths.vault}")
     print(f"inbox: {config.paths.inbox}")
-    print(f"readable: {config.paths.readable}")
+    print(f"state: {config.paths.state}")
+    print("views:")
+    for name, target in config.views.targets.items():
+        print(f"  {name}: {target.path}")
     print(f"encryption secret: {secret_status}")
     print(f"git: {git_status}")
     if git_changes:
@@ -227,6 +249,18 @@ def build_parser() -> argparse.ArgumentParser:
     add.add_argument("path", type=Path, help="Original file to preserve.")
     add.add_argument("--id", required=True, help="Stable slash-separated record ID.")
     add.add_argument("--title", required=True, help="Human-readable record title.")
+    add.add_argument(
+        "--view-name",
+        required=True,
+        help="Explicit descriptive filename stem for readable views.",
+    )
+    add.add_argument(
+        "--view-folder",
+        help=(
+            "Optional relative readable folder; nested folders are allowed when "
+            "they materially improve retrieval."
+        ),
+    )
     add.add_argument("--domain", required=True, help="Configured document domain.")
     add.add_argument("--owner", required=True, help="Record owner identifier.")
     add.add_argument(
@@ -266,6 +300,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     extract.add_argument("record_id", help="Record ID to extract.")
     extract.add_argument("--output", type=Path, required=True, help="Output path.")
+    organize = record_commands.add_parser(
+        "organize",
+        help="Persist readable filename and folder overrides for one record.",
+    )
+    organize.add_argument("record_id", help="Record ID to reorganize.")
+    organize.add_argument(
+        "--name",
+        help="Descriptive readable filename stem, without an extension.",
+    )
+    organize.add_argument(
+        "--folder",
+        help=(
+            "Relative readable folder; nested folders are allowed when they "
+            "materially improve retrieval."
+        ),
+    )
+    organize.add_argument("--clear-folder", action="store_true")
 
     preference_parser = commands.add_parser(
         "preference",
@@ -333,40 +384,34 @@ def build_parser() -> argparse.ArgumentParser:
 
     view_parser = commands.add_parser(
         "view",
-        help="Build the disposable plaintext view from committed records.",
+        help="Refresh disposable plaintext views from committed records.",
     )
     view_commands = view_parser.add_subparsers(dest="view_command", required=True)
-    view_commands.add_parser(
-        "build",
-        help="Replace the readable view with records from Git HEAD.",
+    view_refresh = view_commands.add_parser(
+        "refresh",
+        help="Refresh every configured view destination from Git HEAD.",
     )
-    view_export = view_commands.add_parser(
-        "export",
-        help="Export the committed readable view to an external transport.",
+    view_refresh.add_argument(
+        "--target",
+        action="append",
+        help="Refresh only this configured target; may be repeated.",
     )
-    view_export_commands = view_export.add_subparsers(
-        dest="view_export_command",
+    view_refresh.add_argument(
+        "--force",
+        action="store_true",
+        help="Rebuild even when the destination already records the current commit.",
+    )
+    view_auto = view_commands.add_parser(
+        "auto",
+        help="Manage automatic macOS view refresh.",
+    )
+    view_auto_commands = view_auto.add_subparsers(
+        dest="view_auto_command",
         required=True,
     )
-    view_export_folder = view_export_commands.add_parser(
-        "folder",
-        help="Export the committed readable view to a local folder transport.",
-    )
-    view_export_folder.add_argument(
-        "--profile",
-        default="default",
-        help="Configured folder source profile.",
-    )
-    view_export_folder.add_argument(
-        "--folder",
-        type=Path,
-        help="Explicit destination path instead of the profile's views folder.",
-    )
-    view_export_folder.add_argument(
-        "--prune",
-        action="store_true",
-        help="Delete stale files previously managed by PDM.",
-    )
+    view_auto_commands.add_parser("install")
+    view_auto_commands.add_parser("status")
+    view_auto_commands.add_parser("uninstall")
 
     source_parser = commands.add_parser(
         "source",
@@ -575,6 +620,8 @@ def main() -> None:
                     source_profile=args.source_profile,
                     source_key=args.source_key,
                     notes=args.notes,
+                    view_name=args.view_name,
+                    view_folder=args.view_folder,
                 )
                 action = "Updated" if existed else "Added"
                 print(f"{action} {args.lifecycle} record: {args.id}")
@@ -624,6 +671,25 @@ def main() -> None:
                     args.output.expanduser().resolve(),
                 )
                 print(f"Extracted record {args.record_id} to: {destination}")
+            elif args.record_command == "organize":
+                metadata = organize_record(
+                    vault=config.paths.vault,
+                    cipher=cipher,
+                    record_id=args.record_id,
+                    name=args.name,
+                    folder=args.folder,
+                    clear_folder=args.clear_folder,
+                )
+                presentation = metadata.get("presentation", {})
+                print(f"Updated readable organization: {args.record_id}")
+                print(
+                    f"name: {presentation.get('name') or '[automatic from title]'}"
+                )
+                print(
+                    f"folder: "
+                    f"{presentation.get('folder') or '[automatic from domain]'}"
+                )
+                print("next: commit the encrypted record; views rename on refresh")
         elif args.command == "preference":
             preferences = PreferenceStore(config.paths.vault, cipher)
             if args.preference_command == "list":
@@ -669,7 +735,7 @@ def main() -> None:
                 print(f"Forgot preference with encrypted event: {destination}")
                 print("next: commit .pdocs/state/preferences/ to share this change")
         elif args.command == "view":
-            if args.view_command == "build":
+            if args.view_command == "refresh":
                 changes = subprocess.run(
                     [
                         "git",
@@ -684,54 +750,76 @@ def main() -> None:
                     text=True,
                     capture_output=True,
                 ).stdout.splitlines()
-                count = build_view_from_head(
-                    config.paths.vault,
-                    config.paths.readable,
-                    cipher,
+                results = refresh_views(
+                    vault=config.paths.vault,
+                    targets=config.views.targets,
+                    cipher=cipher,
+                    selected=set(args.target) if args.target else None,
+                    force=args.force,
+                    protected_paths={
+                        "inbox": config.paths.inbox,
+                        "state": config.paths.state,
+                    },
                 )
-                commit = subprocess.run(
-                    ["git", "rev-parse", "--short=12", "HEAD"],
-                    cwd=config.paths.vault,
-                    check=True,
-                    text=True,
-                    capture_output=True,
-                ).stdout.strip()
-                print(
-                    f"Built readable view from commit {commit}: "
-                    f"{count} record(s) -> {config.paths.readable}"
-                )
+                for result in results:
+                    if result["skipped"]:
+                        print(
+                            f"{result['name']}: already current at "
+                            f"{result['commit'][:12]} -> {result['destination']}"
+                        )
+                    else:
+                        print(
+                            f"{result['name']}: refreshed {result['records']} "
+                            f"record(s), {result['files']} managed file(s) from "
+                            f"{result['commit'][:12]} -> {result['destination']}"
+                        )
+                        print(
+                            f"  changed: {result['changed']}; "
+                            f"pruned: {result['pruned']}"
+                        )
                 if changes:
                     print(
                         f"warning: ignored {len(changes)} uncommitted record change(s):"
                     )
                     for change in changes:
                         print(f"  {change}")
-            elif args.view_command == "export":
-                profile = (
-                    config.sources.folder.get(args.profile) if not args.folder else None
-                )
-                destination = resolve_views_folder(profile, args.folder)
-                for role, local in (
-                    ("vault", config.paths.vault),
-                    ("local inbox", config.paths.inbox),
-                    ("readable view", config.paths.readable),
-                ):
-                    if _paths_overlap(destination, local):
-                        raise ValueError(
-                            f"Folder export must not overlap the configured "
-                            f"{role}: {destination}"
+            elif args.view_command == "auto":
+                if sys.platform != "darwin":
+                    raise RuntimeError(
+                        "Automatic view refresh currently requires macOS launchd"
+                    )
+                path = launch_agent_path(config)
+                target = _launch_agent_target(config)
+                if args.view_auto_command == "install":
+                    path = install_launch_agent(config)
+                    subprocess.run(
+                        ["launchctl", "bootout", target],
+                        text=True,
+                        capture_output=True,
+                    )
+                    _run_launchctl(
+                        ["bootstrap", f"gui/{os.getuid()}", str(path)]
+                    )
+                    _run_launchctl(["kickstart", "-k", target])
+                    print(
+                        f"Installed automatic view refresh every "
+                        f"{config.views.refresh_interval_seconds} seconds: {path}"
+                    )
+                elif args.view_auto_command == "status":
+                    if not path.is_file():
+                        raise RuntimeError(
+                            f"Automatic view refresh is not installed: {path}"
                         )
-                result = export_view_to_folder(
-                    vault=config.paths.vault,
-                    destination=destination,
-                    cipher=cipher,
-                    prune=args.prune,
-                )
-                print(
-                    f"Exported {result['records']} record(s), "
-                    f"{result['files']} managed file(s) -> {destination}"
-                )
-                print(f"changed: {result['changed']}; pruned: {result['pruned']}")
+                    _run_launchctl(["print", target])
+                    print(f"Automatic view refresh is loaded: {path}")
+                elif args.view_auto_command == "uninstall":
+                    subprocess.run(
+                        ["launchctl", "bootout", target],
+                        text=True,
+                        capture_output=True,
+                    )
+                    path.unlink(missing_ok=True)
+                    print("Automatic view refresh uninstalled")
         elif args.command == "source":
             ledger = SourceLedger(config.paths.vault, cipher)
             if args.source_command == "run":

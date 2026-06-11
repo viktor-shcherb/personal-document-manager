@@ -21,7 +21,6 @@ class DeploymentConfig:
 class PathsConfig:
     vault: Path
     inbox: Path
-    readable: Path
     state: Path
 
 
@@ -61,14 +60,23 @@ class FolderSourceProfile:
     name: str
     root: Path
     inbox: str
-    views: str
     extensions: tuple[str, ...]
 
     def inbox_path(self) -> Path:
         return _child_path(self.root, self.inbox)
 
-    def views_path(self) -> Path:
-        return _child_path(self.root, self.views)
+
+@dataclass(frozen=True)
+class ViewTargetConfig:
+    name: str
+    path: Path
+    prune: bool
+
+
+@dataclass(frozen=True)
+class ViewsConfig:
+    refresh_interval_seconds: int
+    targets: dict[str, ViewTargetConfig]
 
 
 @dataclass(frozen=True)
@@ -86,6 +94,7 @@ class AppConfig:
     gmail: GmailConfig
     backup: BackupConfig
     sources: SourcesConfig
+    views: ViewsConfig
     raw: dict
 
 
@@ -162,12 +171,38 @@ def _source_profiles(data: dict) -> SourcesConfig:
             name=name,
             root=_path(profile["root"]),
             inbox=profile.get("inbox", "Inbox"),
-            views=profile.get("views", "Views"),
             extensions=extensions,
         )
         folder_profiles[name].inbox_path()
-        folder_profiles[name].views_path()
     return SourcesConfig(gmail=gmail_profiles, folder=folder_profiles)
+
+
+def _views_config(data: dict) -> ViewsConfig:
+    configured = data.get("views", {})
+    interval = configured.get("refresh_interval_seconds", 300)
+    if not isinstance(interval, int) or interval < 30:
+        raise ValueError(
+            "[views].refresh_interval_seconds must be an integer of at least 30"
+        )
+
+    targets = {}
+    for name, target in configured.items():
+        if name == "refresh_interval_seconds":
+            continue
+        validate_source_profile_name(name)
+        if not isinstance(target, dict):
+            raise ValueError(f"[views.{name}] must be a table")
+        targets[name] = ViewTargetConfig(
+            name=name,
+            path=_path(target["path"]),
+            prune=target.get("prune", True),
+        )
+    if not targets:
+        raise ValueError("Configure at least one [views.NAME] destination")
+    return ViewsConfig(
+        refresh_interval_seconds=interval,
+        targets=targets,
+    )
 
 
 def _deployment_id(value: str) -> str:
@@ -199,7 +234,6 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         paths=PathsConfig(
             vault=_path(paths["vault"]),
             inbox=_path(paths["inbox"]),
-            readable=_path(paths["readable"]),
             state=_path(paths["state"]),
         ),
         security=SecurityConfig(
@@ -220,5 +254,6 @@ def load_config(path: str | Path | None = None) -> AppConfig:
             folder_name=backup.get("folder_name", "Personal Document Backups"),
         ),
         sources=_source_profiles(data),
+        views=_views_config(data),
         raw=data,
     )

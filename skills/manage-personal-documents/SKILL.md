@@ -18,7 +18,7 @@ mailbox or filesystem mirror.
    and run `pdocs preference list`.
 5. Read [references/source-ledger.md](references/source-ledger.md) before
    running a recurring Gmail or folder source.
-6. Keep the configured vault, inbox, readable view, and exchange folders
+6. Keep the configured vault, inbox, readable views, and exchange folders
    separate.
 
 Never retrieve or print a secret directly. Use `pdocs` commands, which access
@@ -146,6 +146,7 @@ Use lowercase slash-separated identifiers:
 pdocs record add PATH \
   --id "employment/example/contract" \
   --title "Employment contract" \
+  --view-name "Example employment contract" \
   --domain employment \
   --owner self \
   --lifecycle replaceable \
@@ -169,6 +170,32 @@ or shorten a source key.
 Store third-party records only when they are legitimately part of the user's
 personal administration. Set ownership accurately and avoid broad sharing.
 
+Choose `--view-name` deliberately for every record. It is the filename stem
+users see in readable views; do not rely on the original filename or derive it
+later without judgment. Use a stable descriptive title and put the issue date
+in `issued_at`. Do not include a date in the title or view name merely because
+it marks when the document was issued. Keep a date or period in the view name
+only when it is part of the document's identity, such as a tax year or payslip
+month. Readable names must be unique within their folder; refresh rejects
+duplicates so the agent must resolve them explicitly.
+
+If inspection of the generated view reveals a better filename or flatter
+placement, persist the improvement instead of manually renaming disposable
+view files:
+
+```bash
+pdocs record organize RECORD_ID \
+  --name "Descriptive filename" \
+  --folder "Descriptive folder"
+```
+
+Prefer one of the existing domain folders. A custom nested folder is appropriate
+for a coherent property, legal case, or similar dossier when it materially
+improves retrieval. Do not create depth merely for dates, issuers, or document
+types already clear in the filename and metadata. Commit the changed encrypted
+record; the next view refresh renames it in every destination and prunes the
+old managed path. Use `--clear-folder` to return to the domain folder.
+
 ## Verify And Publish
 
 After changes:
@@ -186,10 +213,11 @@ After changes:
    checkpoint, or preference.
 6. Push when the deployment policy enables automatic push.
 7. Confirm the configured Google Drive backup workflow succeeds.
-8. Run `pdocs view build` to materialize the newly committed `HEAD`.
+8. Run `pdocs view refresh` to materialize the newly committed `HEAD` to every
+   configured view destination.
 
-Read the commit identifier printed by `view build`. If it warns that
-uncommitted record changes were ignored, do not describe the readable view as
+Read the commit identifier printed by `view refresh`. If it warns that
+uncommitted record changes were ignored, do not describe the readable views as
 containing those changes.
 
 Never add inbox files, readable files, OAuth material, recovery codes, or

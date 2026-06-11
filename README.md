@@ -34,9 +34,9 @@ packages, general downloads, or an entire mailbox.
 - **Gmail** provides read-only discovery of potentially important messages and
   preserves selected emails in their original form. Recurring scans use an
   encrypted source ledger so sessions and devices share incremental progress.
-- **Folder exchange** stages scans and files from local or synchronized folders
-  and exports the latest committed readable view without deleting unrelated
-  files.
+- **Folder exchange** stages scans and files from local or synchronized folders.
+- **Readable views** materialize one logical projection of committed records to
+  any number of configured local or synchronized destinations.
 - **Remembered preferences** let the user resolve an ambiguous document or
   organization once; encrypted rules guide future agents without repeated
   questions.
@@ -73,9 +73,13 @@ automatically.
 
 ### Find the latest readable documents
 
-Encrypted records remain canonical, while a separate local folder contains a
-readable copy of the latest committed versions for normal use. That view can
-also be exported to an iCloud Drive or other locally synchronized folder.
+Encrypted records remain canonical, while configured view destinations contain
+the same readable projection of the latest committed versions for normal use.
+Destinations can include a local folder, iCloud Drive, or another synchronized
+folder. The view uses a small set of descriptive domain folders and readable
+filenames chosen explicitly by the importing agent; dates stay in metadata
+unless they identify a recurring document. Agents can persist later naming
+improvements with `pdocs record organize`.
 
 ### Recover after loss
 
@@ -93,14 +97,15 @@ https://github.com/viktor-shcherb/personal-document-manager
 
 Read the repository documentation and handle the setup end to end. Before
 creating anything, ask me to confirm:
-- where the encrypted vault, temporary inbox, and readable documents should live
+- where the encrypted vault, temporary inbox, and readable view destinations
+  should live
 - which document categories I want managed
 - which Gmail account, private GitHub repository, and Google Drive account to use
 
 Keep all secrets outside version control. Explain any browser authorization or
 recovery step that requires my direct action. Test document import, replacement,
-readable-view generation, GitHub synchronization, Google Drive backup, and
-recovery using fake documents before importing my real files.
+view refresh, GitHub synchronization, Google Drive backup, and recovery using
+fake documents before importing my real files.
 ```
 
 The agent should follow [the setup guide](docs/setup.md) and install the
@@ -131,7 +136,7 @@ recovery material, inbox contents, or readable copies.
 ## Privacy Model
 
 Documents are encrypted before entering GitHub or Google Drive. The plaintext
-inbox and readable view remain local and separate from the encrypted vault.
+inbox and readable views remain outside the encrypted vault.
 
 Git metadata can still reveal record paths, repository names, and commit
 messages. Use neutral identifiers and avoid sensitive details in commit

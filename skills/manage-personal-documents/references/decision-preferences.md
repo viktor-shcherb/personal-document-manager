@@ -72,8 +72,19 @@ pdocs preference remember organization \
 ```
 
 Organization preferences may cover domain, owner, lifecycle, ID prefix, and
-free-form grouping guidance. They control the record ID hierarchy that becomes
-the readable folder hierarchy.
+free-form grouping guidance. They control stable semantic organization in the
+encrypted vault. The readable projection defaults to one descriptive folder
+per domain and descriptive filenames derived from record titles.
+
+Store issue dates in metadata unless a date or period is part of the document's
+identity. If a better readable name or placement is discovered later, use
+`pdocs record organize` and commit the encrypted record. Do not manually rename
+generated view files because refresh will replace unmanaged presentation
+changes.
+
+Readable folders should be flat by default. Use nested folders for a coherent
+property, legal case, or similar dossier only when the grouping materially
+improves retrieval.
 
 ## Scope And Conflicts
 

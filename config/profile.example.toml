@@ -7,8 +7,18 @@ id = "REPLACE-WITH-UUID"
 [paths]
 vault = "~/Documents/Personal Documents Vault"
 inbox = "~/Documents/Personal Documents Inbox"
-readable = "~/Documents/Personal Documents"
 state = "~/.local/state/pdocs"
+
+[views]
+refresh_interval_seconds = 300
+
+[views.local]
+path = "~/Documents/Personal Documents"
+prune = true
+
+[views.icloud]
+path = "~/Library/Mobile Documents/com~apple~CloudDocs/Personal Documents"
+prune = true
 
 [security]
 cipher = "gpg-symmetric"
@@ -31,7 +41,6 @@ overlap_window = "24h"
 # A normal local folder or a locally synchronized cloud folder.
 root = "~/Documents/PDM Exchange"
 inbox = "Inbox"
-views = "Views"
 extensions = ["pdf", "jpg", "jpeg", "png", "heic"]
 
 [backup]
@@ -44,7 +53,6 @@ folder_name = "Personal Document Backups"
 [workflow]
 commit_after_import = true
 push_after_commit = true
-build_readable_view = true
 require_approval_for = ["delete-record", "change-owner"]
 
 [taxonomy]

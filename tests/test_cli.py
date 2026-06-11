@@ -159,6 +159,78 @@ def test_parser_accepts_inclusion_and_organization_preferences():
     assert organization.lifecycle == "event"
 
 
+def test_parser_accepts_view_refresh_and_automation_commands():
+    refresh = build_parser().parse_args(
+        ["view", "refresh", "--target", "icloud", "--force"]
+    )
+    install = build_parser().parse_args(["view", "auto", "install"])
+
+    assert refresh.view_command == "refresh"
+    assert refresh.target == ["icloud"]
+    assert refresh.force is True
+    assert install.view_auto_command == "install"
+
+
+def test_parser_accepts_persistent_record_organization():
+    organize = build_parser().parse_args(
+        [
+            "record",
+            "organize",
+            "employment/example/contract",
+            "--name",
+            "Example employment agreement",
+            "--folder",
+            "Work",
+        ]
+    )
+
+    assert organize.record_command == "organize"
+    assert organize.name == "Example employment agreement"
+    assert organize.folder == "Work"
+
+
+def test_record_add_requires_explicit_view_name():
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(
+            [
+                "record",
+                "add",
+                "/tmp/document.pdf",
+                "--id",
+                "employment/example/document",
+                "--title",
+                "Example document",
+                "--domain",
+                "employment",
+                "--owner",
+                "self",
+                "--lifecycle",
+                "event",
+            ]
+        )
+
+    add = build_parser().parse_args(
+        [
+            "record",
+            "add",
+            "/tmp/document.pdf",
+            "--id",
+            "employment/example/document",
+            "--title",
+            "Example document",
+            "--view-name",
+            "Example employment document",
+            "--domain",
+            "employment",
+            "--owner",
+            "self",
+            "--lifecycle",
+            "event",
+        ]
+    )
+    assert add.view_name == "Example employment document"
+
+
 def test_source_run_output_tells_agent_to_commit_ledger(capsys):
     result = SimpleNamespace(
         source_key="gmail:documents:key",

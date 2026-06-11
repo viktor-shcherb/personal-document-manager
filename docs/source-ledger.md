@@ -23,7 +23,6 @@ overlap_window = "24h"
 [sources.folder.iphone]
 root = "~/Documents/PDM Exchange"
 inbox = "Inbox"
-views = "Views"
 extensions = ["pdf", "jpg", "jpeg", "png", "heic"]
 ```
 
