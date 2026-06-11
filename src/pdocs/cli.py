@@ -131,6 +131,16 @@ def _launch_agent_target(config: AppConfig) -> str:
     return f"gui/{os.getuid()}/{launch_agent_label(config)}"
 
 
+def _current_pdocs_command() -> tuple[str, ...]:
+    invoked = Path(sys.argv[0]).expanduser()
+    if invoked.name == "pdocs" and invoked.is_file():
+        return (str(invoked.resolve()),)
+    executable = shutil.which("pdocs")
+    if executable:
+        return (str(Path(executable).resolve()),)
+    return (sys.executable, "-m", "pdocs")
+
+
 def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
     errors = []
     configured_paths = {
@@ -791,7 +801,10 @@ def main() -> None:
                 path = launch_agent_path(config)
                 target = _launch_agent_target(config)
                 if args.view_auto_command == "install":
-                    path = install_launch_agent(config)
+                    path = install_launch_agent(
+                        config,
+                        command=_current_pdocs_command(),
+                    )
                     subprocess.run(
                         ["launchctl", "bootout", target],
                         text=True,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import plistlib
-import sys
 from pathlib import Path
 
 from .config import AppConfig
@@ -27,12 +26,14 @@ def launch_agent_path(
 def install_launch_agent(
     config: AppConfig,
     *,
-    python_executable: Path | None = None,
+    command: tuple[str, ...],
     launch_agents: Path | None = None,
 ) -> Path:
-    executable = (python_executable or Path(sys.executable)).resolve()
+    if not command:
+        raise ViewAutomationError("Automatic view refresh command is empty")
+    executable = Path(command[0]).expanduser().resolve()
     if not executable.is_file():
-        raise ViewAutomationError(f"Python executable not found: {executable}")
+        raise ViewAutomationError(f"PDM executable not found: {executable}")
 
     logs = config.paths.state / "view-refresh"
     logs.mkdir(parents=True, exist_ok=True)
@@ -43,8 +44,7 @@ def install_launch_agent(
         "Label": label,
         "ProgramArguments": [
             str(executable),
-            "-m",
-            "pdocs",
+            *command[1:],
             "--config",
             str(config.path),
             "view",
