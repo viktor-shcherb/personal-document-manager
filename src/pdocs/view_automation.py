@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import plistlib
+import shutil
 from pathlib import Path
 
 from .config import AppConfig
@@ -34,6 +36,22 @@ def install_launch_agent(
     executable = Path(command[0]).expanduser().resolve()
     if not executable.is_file():
         raise ViewAutomationError(f"PDM executable not found: {executable}")
+    gpg_executable = shutil.which(config.security.gpg_binary)
+    if not gpg_executable:
+        raise ViewAutomationError(
+            f"GnuPG executable not found: {config.security.gpg_binary}"
+        )
+    path_entries = [
+        str(executable.parent),
+        str(Path(gpg_executable).resolve().parent),
+        *os.environ.get("PATH", "").split(os.pathsep),
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ]
+    environment_path = os.pathsep.join(dict.fromkeys(filter(None, path_entries)))
 
     logs = config.paths.state / "view-refresh"
     logs.mkdir(parents=True, exist_ok=True)
@@ -54,6 +72,9 @@ def install_launch_agent(
         "StartInterval": config.views.refresh_interval_seconds,
         "ProcessType": "Background",
         "LowPriorityIO": True,
+        "EnvironmentVariables": {
+            "PATH": environment_path,
+        },
         "StandardOutPath": str(logs / "stdout.log"),
         "StandardErrorPath": str(logs / "stderr.log"),
     }

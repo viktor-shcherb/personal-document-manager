@@ -18,6 +18,13 @@ DEPLOYMENT_ID = "00000000-0000-4000-8000-000000000001"
 
 def test_launch_agent_refreshes_configured_views_on_interval(tmp_path: Path):
     config_path = tmp_path / "config.toml"
+    executable = tmp_path / "bin/pdocs"
+    gpg = tmp_path / "bin/gpg"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    gpg.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+    gpg.chmod(0o755)
     config_path.write_text(
         f"""
 [deployment]
@@ -35,14 +42,11 @@ refresh_interval_seconds = 420
 path = "{tmp_path / "readable"}"
 
 [security]
-gpg_binary = "gpg"
+gpg_binary = "{gpg}"
 """,
         encoding="utf-8",
     )
     config = load_config(config_path)
-    executable = tmp_path / "bin/pdocs"
-    executable.parent.mkdir()
-    executable.write_text("#!/bin/sh\n", encoding="utf-8")
 
     destination = install_launch_agent(
         config,
@@ -61,6 +65,7 @@ gpg_binary = "gpg"
         "view",
         "refresh",
     ]
+    assert str(executable.parent) in data["EnvironmentVariables"]["PATH"].split(":")
 
 
 def test_launch_agent_rejects_missing_pdocs_executable(tmp_path: Path):
@@ -79,7 +84,7 @@ state = "{tmp_path / "state"}"
 path = "{tmp_path / "readable"}"
 
 [security]
-gpg_binary = "gpg"
+gpg_binary = "{tmp_path / "missing-gpg"}"
 """,
         encoding="utf-8",
     )
@@ -88,5 +93,37 @@ gpg_binary = "gpg"
         install_launch_agent(
             load_config(config_path),
             command=(str(tmp_path / "missing-pdocs"),),
+            launch_agents=tmp_path / "LaunchAgents",
+        )
+
+
+def test_launch_agent_rejects_missing_gpg_executable(tmp_path: Path):
+    config_path = tmp_path / "config.toml"
+    executable = tmp_path / "pdocs"
+    executable.write_text("#!/bin/sh\n", encoding="utf-8")
+    executable.chmod(0o755)
+    config_path.write_text(
+        f"""
+[deployment]
+id = "{DEPLOYMENT_ID}"
+
+[paths]
+vault = "{tmp_path / "vault"}"
+inbox = "{tmp_path / "inbox"}"
+state = "{tmp_path / "state"}"
+
+[views.local]
+path = "{tmp_path / "readable"}"
+
+[security]
+gpg_binary = "{tmp_path / "missing-gpg"}"
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ViewAutomationError, match="GnuPG executable not found"):
+        install_launch_agent(
+            load_config(config_path),
+            command=(str(executable),),
             launch_agents=tmp_path / "LaunchAgents",
         )
