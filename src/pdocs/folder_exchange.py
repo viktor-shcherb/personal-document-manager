@@ -213,6 +213,38 @@ def _managed_destination(root: Path, relative: str) -> Path:
     return destination
 
 
+def _stale_managed_directories(
+    destination: Path,
+    stale_files: set[str],
+) -> list[Path]:
+    directories = set()
+    for relative in stale_files:
+        parent = Path(relative).parent
+        while parent != Path("."):
+            directories.add(_managed_destination(destination, parent.as_posix()))
+            parent = parent.parent
+    return sorted(
+        directories,
+        key=lambda path: len(path.relative_to(destination).parts),
+        reverse=True,
+    )
+
+
+def _remove_stale_managed_directories(
+    destination: Path,
+    stale_files: set[str],
+) -> None:
+    for directory in _stale_managed_directories(destination, stale_files):
+        if directory.is_symlink() or not directory.is_dir():
+            continue
+        children = list(directory.iterdir())
+        if any(child.name != ".DS_Store" for child in children):
+            continue
+        for child in children:
+            child.unlink()
+        directory.rmdir()
+
+
 def _git_head(vault: Path) -> str:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -249,11 +281,13 @@ def _sync_generated_view(
 
     pruned = 0
     if prune:
-        for relative in sorted(previous - current):
+        stale = previous - current
+        for relative in sorted(stale):
             path = _managed_destination(destination, relative)
             if path.is_file():
                 path.unlink()
                 pruned += 1
+        _remove_stale_managed_directories(destination, stale)
         for directory in sorted(destination.rglob("*"), reverse=True):
             if (
                 not directory.is_symlink()

@@ -91,6 +91,7 @@ def test_view_export_is_idempotent_and_prunes_only_managed_files(tmp_path: Path)
     assert first["changed"] > 0
     assert second["changed"] == 0
     assert (destination / "Archive/Identity/Document.txt").read_text() == "current"
+    (destination / "Archive/Identity/.DS_Store").write_bytes(b"finder metadata")
     metadata = json.loads(
         (destination / ".metadata/Archive/Identity/Document.json").read_text()
     )
@@ -127,6 +128,7 @@ def test_view_export_is_idempotent_and_prunes_only_managed_files(tmp_path: Path)
     )
     assert result["pruned"] > 0
     assert unrelated.read_text(encoding="utf-8") == "keep"
+    assert not (destination / "Archive/Identity").exists()
 
 
 def test_view_export_rejects_symlink_redirect_outside_destination(tmp_path: Path):
