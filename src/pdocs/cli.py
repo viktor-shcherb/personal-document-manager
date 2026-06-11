@@ -149,10 +149,7 @@ def cmd_check(config: AppConfig, keychain: MacOSKeychain) -> None:
         "state": config.paths.state,
     }
     configured_paths.update(
-        {
-            f"view {name!r}": target.path
-            for name, target in config.views.targets.items()
-        }
+        {f"view {name!r}": target.path for name, target in config.views.targets.items()}
     )
     path_items = list(configured_paths.items())
     for index, (left_name, left) in enumerate(path_items):
@@ -692,12 +689,9 @@ def main() -> None:
                 )
                 presentation = metadata.get("presentation", {})
                 print(f"Updated readable organization: {args.record_id}")
+                print(f"name: {presentation.get('name') or '[automatic from title]'}")
                 print(
-                    f"name: {presentation.get('name') or '[automatic from title]'}"
-                )
-                print(
-                    f"folder: "
-                    f"{presentation.get('folder') or '[automatic from domain]'}"
+                    f"folder: {presentation.get('folder') or '[automatic from domain]'}"
                 )
                 print("next: commit the encrypted record; views rename on refresh")
         elif args.command == "preference":
@@ -810,9 +804,7 @@ def main() -> None:
                         text=True,
                         capture_output=True,
                     )
-                    _run_launchctl(
-                        ["bootstrap", f"gui/{os.getuid()}", str(path)]
-                    )
+                    _run_launchctl(["bootstrap", f"gui/{os.getuid()}", str(path)])
                     _run_launchctl(["kickstart", "-k", target])
                     print(
                         f"Installed automatic view refresh every "

@@ -180,9 +180,7 @@ def organize_record(
             presentation["folder"] = _validate_presentation_folder(folder)
 
         if "name" not in presentation:
-            raise RecordError(
-                "Record has no explicit readable filename; set --name"
-            )
+            raise RecordError("Record has no explicit readable filename; set --name")
         metadata["schema"] = 2
         metadata["presentation"] = presentation
 

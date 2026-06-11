@@ -97,9 +97,9 @@ def test_build_view_materializes_latest_records(tmp_path: Path):
 
     assert build_view(vault, readable, cipher) == 1
     assert (readable / "Employment/Contract.txt").read_text() == "terms"
-    metadata = (
-        readable / ".metadata/Employment/Contract.json"
-    ).read_text(encoding="utf-8")
+    metadata = (readable / ".metadata/Employment/Contract.json").read_text(
+        encoding="utf-8"
+    )
     assert '"issued_at": null' in metadata
     index = json.loads((readable / "INDEX.json").read_text())
     assert index[0]["view"]["document"] == "Employment/Contract.txt"

@@ -236,14 +236,10 @@ def test_refresh_views_materializes_one_commit_to_all_targets(tmp_path: Path):
     assert all(not item["skipped"] for item in first)
     assert all(item["skipped"] for item in second)
     for target in targets.values():
-        manifest = json.loads(
-            (target.path / ".pdocs-folder-export.json").read_text()
-        )
+        manifest = json.loads((target.path / ".pdocs-folder-export.json").read_text())
         assert manifest["schema"] == 2
         assert manifest["commit"] == commit
-        assert (
-            target.path / "Identity/Document.txt"
-        ).read_text() == "current"
+        assert (target.path / "Identity/Document.txt").read_text() == "current"
 
     missing = targets["local"].path / "Identity/Document.txt"
     missing.unlink()

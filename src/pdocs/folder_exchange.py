@@ -175,7 +175,9 @@ def _managed_export(root: Path) -> tuple[set[str], str | None]:
         managed.add(path.as_posix())
     commit = data.get("commit") if data.get("schema") == 2 else None
     if commit is not None and not isinstance(commit, str):
-        raise FolderExchangeError(f"Invalid commit in folder export manifest: {manifest}")
+        raise FolderExchangeError(
+            f"Invalid commit in folder export manifest: {manifest}"
+        )
     return managed, commit
 
 
@@ -332,9 +334,7 @@ def refresh_views(
     }
     missing = sorted((selected or set()) - set(targets))
     if missing:
-        raise FolderExchangeError(
-            f"Unknown view target(s): {', '.join(missing)}"
-        )
+        raise FolderExchangeError(f"Unknown view target(s): {', '.join(missing)}")
 
     protected = {"vault": vault, **(protected_paths or {})}
     chosen_items = list(chosen.items())
