@@ -51,16 +51,18 @@ pdocs preference remember organization \
 ```
 
 The record ID hierarchy remains the stable semantic organization inside the
-encrypted vault. The readable view is flatter: it defaults to one descriptive
-domain folder and uses the explicit filename selected by the importing agent.
-Agents should inspect neighboring record IDs and use existing conventions
-before asking for a new preference.
+encrypted vault. The importing agent must separately choose readable access:
+`frequent` places the file directly at the view root, while `archive` places it
+under `Archive/<domain>`. Use `frequent` narrowly for documents likely to be
+opened or supplied again. Use `archive` for historical evidence and records
+retained mainly just in case.
 
-Deeper readable folders remain available for a coherent property, legal case,
-or other dossier where grouping materially helps retrieval. Avoid folders that
-only restate a filename, issuer, document type, or non-semantic issue date.
+Deeper readable folders remain available inside `Archive` for a coherent
+property, legal case, or other dossier where grouping materially helps
+retrieval. Frequent records cannot have folders.
 
-The importing agent must choose an explicit `--view-name` for every document.
+The importing agent must choose an explicit `--view-name` and `--view-access`
+for every document.
 Use a stable descriptive title and store the issue date in `issued_at`. Do not
 put a date in a title or view name merely because the document was issued that
 day. A date or period may remain when it is part of the document's identity,
@@ -73,7 +75,8 @@ changing the semantic record ID:
 ```bash
 pdocs record organize RECORD_ID \
   --name "Descriptive filename" \
-  --folder "Finance, Tax and Banking"
+  --access archive \
+  --folder "Finance, Tax and Banking/Pensions"
 ```
 
 ## Inspect And Change Preferences

@@ -14,6 +14,7 @@ from .interfaces import Cipher
 
 
 COMPONENT = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+PRESENTATION_ACCESS = {"frequent", "archive"}
 
 
 class RecordError(RuntimeError):
@@ -60,6 +61,7 @@ def add_record(
     source_key: str | None = None,
     notes: str | None = None,
     view_name: str,
+    view_access: str,
     view_folder: str | None = None,
 ) -> Path:
     if lifecycle not in {"replaceable", "event"}:
@@ -77,8 +79,12 @@ def add_record(
                 f"Cannot change lifecycle for existing record: {record_id}"
             )
 
+    access = _validate_presentation_access(view_access)
+    if access == "frequent" and view_folder is not None:
+        raise RecordError("Frequent-access records must stay at the view root")
+
     metadata = {
-        "schema": 2,
+        "schema": 3,
         "id": record_id,
         "title": title,
         "domain": domain,
@@ -101,6 +107,7 @@ def add_record(
         },
         "presentation": {
             "name": _validate_presentation_name(view_name),
+            "access": access,
         },
     }
     if view_folder is not None:
@@ -132,6 +139,14 @@ def _validate_presentation_name(name: str) -> str:
     return name
 
 
+def _validate_presentation_access(access: str) -> str:
+    access = access.strip().lower()
+    if access not in PRESENTATION_ACCESS:
+        allowed = ", ".join(sorted(PRESENTATION_ACCESS))
+        raise RecordError(f"Readable access must be one of: {allowed}")
+    return access
+
+
 def _validate_presentation_folder(folder: str) -> str:
     folder = folder.strip()
     path = Path(folder)
@@ -152,6 +167,7 @@ def organize_record(
     cipher: Cipher,
     record_id: str,
     name: str | None = None,
+    access: str | None = None,
     folder: str | None = None,
     clear_folder: bool = False,
 ) -> dict:
@@ -160,8 +176,10 @@ def organize_record(
         raise RecordError(f"Record not found: {record_id}")
     if folder is not None and clear_folder:
         raise RecordError("Cannot set and clear the readable folder together")
-    if not any((name is not None, folder is not None, clear_folder)):
-        raise RecordError("Specify a readable filename or folder change")
+    if not any(
+        (name is not None, access is not None, folder is not None, clear_folder)
+    ):
+        raise RecordError("Specify a readable filename, access, or folder change")
 
     with tempfile.TemporaryDirectory() as temporary_dir:
         temporary = Path(temporary_dir)
@@ -174,6 +192,8 @@ def organize_record(
 
         if name is not None:
             presentation["name"] = _validate_presentation_name(name)
+        if access is not None:
+            presentation["access"] = _validate_presentation_access(access)
         if clear_folder:
             presentation.pop("folder", None)
         elif folder is not None:
@@ -181,7 +201,13 @@ def organize_record(
 
         if "name" not in presentation:
             raise RecordError("Record has no explicit readable filename; set --name")
-        metadata["schema"] = 2
+        if "access" not in presentation:
+            raise RecordError("Record has no explicit readable access; set --access")
+        if presentation["access"] == "frequent":
+            if folder is not None:
+                raise RecordError("Frequent-access records must stay at the view root")
+            presentation.pop("folder", None)
+        metadata["schema"] = 3
         metadata["presentation"] = presentation
 
         metadata_path = unpacked / "metadata.json"

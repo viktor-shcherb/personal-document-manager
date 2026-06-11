@@ -179,6 +179,8 @@ def test_parser_accepts_persistent_record_organization():
             "employment/example/contract",
             "--name",
             "Example employment agreement",
+            "--access",
+            "archive",
             "--folder",
             "Work",
         ]
@@ -186,6 +188,7 @@ def test_parser_accepts_persistent_record_organization():
 
     assert organize.record_command == "organize"
     assert organize.name == "Example employment agreement"
+    assert organize.access == "archive"
     assert organize.folder == "Work"
 
 
@@ -220,6 +223,8 @@ def test_record_add_requires_explicit_view_name():
             "Example document",
             "--view-name",
             "Example employment document",
+            "--view-access",
+            "frequent",
             "--domain",
             "employment",
             "--owner",
@@ -229,6 +234,7 @@ def test_record_add_requires_explicit_view_name():
         ]
     )
     assert add.view_name == "Example employment document"
+    assert add.view_access == "frequent"
 
 
 def test_source_run_output_tells_agent_to_commit_ledger(capsys):

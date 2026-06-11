@@ -262,6 +262,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Explicit descriptive filename stem for readable views.",
     )
     add.add_argument(
+        "--view-access",
+        required=True,
+        choices=["frequent", "archive"],
+        help=(
+            "Place a frequently reused document at the view root or retain it "
+            "under Archive."
+        ),
+    )
+    add.add_argument(
         "--view-folder",
         help=(
             "Optional relative readable folder; nested folders are allowed when "
@@ -315,6 +324,13 @@ def build_parser() -> argparse.ArgumentParser:
     organize.add_argument(
         "--name",
         help="Descriptive readable filename stem, without an extension.",
+    )
+    organize.add_argument(
+        "--access",
+        choices=["frequent", "archive"],
+        help=(
+            "Place the document at the view root for frequent access or under Archive."
+        ),
     )
     organize.add_argument(
         "--folder",
@@ -628,6 +644,7 @@ def main() -> None:
                     source_key=args.source_key,
                     notes=args.notes,
                     view_name=args.view_name,
+                    view_access=args.view_access,
                     view_folder=args.view_folder,
                 )
                 action = "Updated" if existed else "Added"
@@ -652,10 +669,12 @@ def main() -> None:
                 elif not records:
                     print("No records found.")
                 else:
-                    print("ID\tLIFECYCLE\tISSUED\tOWNER\tTITLE")
+                    print("ID\tLIFECYCLE\tACCESS\tISSUED\tOWNER\tTITLE")
                     for record in records:
+                        access = record.get("presentation", {}).get("access") or "-"
                         print(
                             f"{record['id']}\t{record['lifecycle']}\t"
+                            f"{access}\t"
                             f"{record.get('issued_at') or '-'}\t"
                             f"{record['owner']}\t{record['title']}"
                         )
@@ -684,14 +703,17 @@ def main() -> None:
                     cipher=cipher,
                     record_id=args.record_id,
                     name=args.name,
+                    access=args.access,
                     folder=args.folder,
                     clear_folder=args.clear_folder,
                 )
                 presentation = metadata.get("presentation", {})
                 print(f"Updated readable organization: {args.record_id}")
                 print(f"name: {presentation.get('name') or '[automatic from title]'}")
+                print(f"access: {presentation.get('access') or '[not set]'}")
                 print(
-                    f"folder: {presentation.get('folder') or '[automatic from domain]'}"
+                    f"folder: "
+                    f"{presentation.get('folder') or '[root or archive domain]'}"
                 )
                 print("next: commit the encrypted record; views rename on refresh")
         elif args.command == "preference":

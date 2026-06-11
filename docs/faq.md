@@ -203,6 +203,8 @@ record files, per-record metadata, and `INDEX.json`.
 
 Destinations differ only in location and synchronization behavior. PDM tracks
 the files it manages in each destination and preserves unrelated files.
+Frequently reused documents appear directly at the view root. Rarely accessed
+historical evidence is grouped under `Archive`.
 
 ### Can views update automatically?
 

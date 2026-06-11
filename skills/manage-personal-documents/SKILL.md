@@ -147,6 +147,7 @@ pdocs record add PATH \
   --id "employment/example/contract" \
   --title "Employment contract" \
   --view-name "Example employment contract" \
+  --view-access frequent \
   --domain employment \
   --owner self \
   --lifecycle replaceable \
@@ -170,14 +171,17 @@ or shorten a source key.
 Store third-party records only when they are legitimately part of the user's
 personal administration. Set ownership accurately and avoid broad sharing.
 
-Choose `--view-name` deliberately for every record. It is the filename stem
-users see in readable views; do not rely on the original filename or derive it
-later without judgment. Use a stable descriptive title and put the issue date
-in `issued_at`. Do not include a date in the title or view name merely because
-it marks when the document was issued. Keep a date or period in the view name
-only when it is part of the document's identity, such as a tax year or payslip
-month. Readable names must be unique within their folder; refresh rejects
-duplicates so the agent must resolve them explicitly.
+Choose `--view-name` and `--view-access frequent|archive` deliberately for every
+record. Frequent means likely to be opened or supplied again, and places the
+file directly at the readable root. Use it narrowly for current identity
+documents, reusable application material, current contracts and policies, core
+active housing documents, and similar references. Archive historical evidence,
+old statements, correspondence, expired documents, completed cases, and
+records retained mainly just in case.
+
+Do not rely on the original filename. Put the issue date in `issued_at`; keep a
+date or period in the view name only when it is part of the document's identity.
+Readable names must be unique within their effective folder.
 
 If inspection of the generated view reveals a better filename or flatter
 placement, persist the improvement instead of manually renaming disposable
@@ -186,15 +190,14 @@ view files:
 ```bash
 pdocs record organize RECORD_ID \
   --name "Descriptive filename" \
+  --access archive \
   --folder "Descriptive folder"
 ```
 
-Prefer one of the existing domain folders. A custom nested folder is appropriate
-for a coherent property, legal case, or similar dossier when it materially
-improves retrieval. Do not create depth merely for dates, issuers, or document
-types already clear in the filename and metadata. Commit the changed encrypted
-record; the next view refresh renames it in every destination and prunes the
-old managed path. Use `--clear-folder` to return to the domain folder.
+Frequent records cannot have folders. For archived records, prefer the existing
+domain folder; a custom nested folder is appropriate for a coherent property,
+legal case, or similar dossier. Commit the changed encrypted record; the next
+view refresh renames it in every destination and prunes the old managed path.
 
 ## Verify And Publish
 

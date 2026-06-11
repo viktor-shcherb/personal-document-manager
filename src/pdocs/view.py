@@ -57,15 +57,26 @@ def _presentation(metadata: dict) -> dict:
 
 
 def _readable_folder(metadata: dict) -> Path:
-    configured = _presentation(metadata).get("folder")
+    presentation = _presentation(metadata)
+    access = presentation.get("access")
+    if access == "frequent":
+        return Path()
+    if access != "archive":
+        raise ViewError(
+            f"Record {metadata['id']!r} has no explicit readable access; "
+            "run `pdocs record organize RECORD_ID --access frequent|archive`"
+        )
+
+    configured = presentation.get("folder")
     if not isinstance(configured, str) or not configured.strip():
-        return Path(_domain_folder(metadata["domain"]))
+        return Path("Archive") / _domain_folder(metadata["domain"])
     parts = [
         _readable_name(part, fallback="Other")
         for part in Path(configured).parts
         if part not in {"", ".", ".."}
     ]
-    return Path(*parts) if parts else Path(_domain_folder(metadata["domain"]))
+    archive_folder = Path(*parts) if parts else Path(_domain_folder(metadata["domain"]))
+    return Path("Archive") / archive_folder
 
 
 def _readable_stem(metadata: dict) -> str:

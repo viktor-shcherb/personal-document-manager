@@ -46,31 +46,44 @@ Refresh every destination from the same committed Git `HEAD`:
 pdocs view refresh
 ```
 
-Each destination uses a deliberately flat readable layout:
+Each destination keeps frequently reused documents directly visible and moves
+rare evidence into an archive:
 
 ```text
-Employment/
-  EPFL employment contract.pdf
-  UNIL payslip - 2026-03-25.pdf
-.metadata/
+Russian passport.pdf
+Swiss residence permit.pdf
+Current curriculum vitae.pdf
+EPFL employment contract.pdf
+Archive/
   Employment/
-    EPFL employment contract.json
-    UNIL payslip - 2026-03-25.json
+    UNIL payslip 2024-03.pdf
+  Home and Housing/
+    Route d'Oron 5/
+      Refrigerator defect photo.jpg
+.metadata/
 INDEX.json
 ```
 
-The default visible folder is the descriptive document domain. The importing
-agent must choose an explicit `--view-name`; PDM never exposes the opaque
-original filename or silently invents a readable name. An issue date stays in
-metadata unless it is part of the document's identity, such as a tax year or
-payslip month. Names must be unique within a folder. Refresh reports duplicate
-names so the agent can choose a better distinction instead of appending an
-automatic suffix.
+The importing agent must choose both an explicit `--view-name` and
+`--view-access frequent|archive`. Frequent records are always placed directly
+at the view root and cannot have a folder. Archive records default to
+`Archive/<domain>`. PDM never exposes the opaque original filename or silently
+invents a readable name.
 
-Nested readable folders are supported when they materially improve retrieval,
-for example `Home and Housing/Route d'Oron 5` or a named legal case. Do not add
-depth merely to repeat the document type, issuer, or issue date already carried
-by the filename and metadata.
+Use `frequent` narrowly for documents likely to be opened or supplied again:
+current identity documents, reusable application material, current contracts
+and policies, core active housing documents, and similar references. Use
+`archive` for historical evidence, old statements, correspondence, expired
+documents, completed cases, and material retained mainly just in case.
+
+An issue date stays in metadata unless it is part of the document's identity,
+such as a tax year or payslip month. Names must be unique within their
+effective folder. Refresh reports duplicate names so the agent can choose a
+better distinction instead of appending an automatic suffix.
+
+Nested folders are supported only inside `Archive` when they materially improve
+retrieval, for example `Archive/Home and Housing/Route d'Oron 5` or a named
+legal case.
 
 PDM records the source commit and managed files in
 `.pdocs-folder-export.json`. Repeated runs skip destinations already at that
@@ -83,16 +96,15 @@ the original content or semantic record ID:
 ```bash
 pdocs record organize employment/epfl/contract/2026-03-30 \
   --name "EPFL employment agreement" \
-  --folder "Employment"
+  --access frequent
 git add records
 git commit -m "Improve readable document organization"
 pdocs view refresh
 ```
 
-Use `--clear-folder` to return to the default domain folder. The explicit
-filename remains required. Presentation metadata is encrypted with the record.
-After commit, refresh renames the managed files in every destination and
-removes their old paths.
+For archived records, `--clear-folder` returns to `Archive/<domain>`.
+Presentation metadata is encrypted with the record. After commit, refresh
+renames the managed files in every destination and removes their old paths.
 
 Destinations must be outside the encrypted vault, inbox, state directory, and
 each other. Refresh always reads Git `HEAD`, so uncommitted record changes are

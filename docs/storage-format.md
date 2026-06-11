@@ -12,11 +12,11 @@ metadata.json
 content/<original filename>
 ```
 
-`metadata.json` uses schema version 2:
+`metadata.json` uses schema version 3:
 
 ```json
 {
-  "schema": 2,
+  "schema": 3,
   "id": "employment/example/contract",
   "title": "Employment contract",
   "domain": "employment",
@@ -38,18 +38,18 @@ content/<original filename>
   },
   "presentation": {
     "name": "EPFL employment agreement",
-    "folder": "Employment"
+    "access": "frequent"
   }
 }
 ```
 
-`presentation.name` is required for new records and is chosen explicitly by the
-importing agent. `presentation.folder` is optional and otherwise defaults to
-the descriptive document domain. These fields affect only the readable
-projection; they do not rename the preserved original, change the semantic
-title, or change the stable record ID. `pdocs record organize` updates them for
-both event and replaceable records. Unknown optional fields must be preserved
-by tools that rewrite a package.
+`presentation.name` and `presentation.access` are required for new records and
+are chosen explicitly by the importing agent. Access is `frequent` or
+`archive`. Frequent records appear directly at the readable root and cannot
+have a folder. `presentation.folder` is optional for archived records and
+otherwise defaults to the document domain beneath `Archive`. These fields
+affect only the readable projection; they do not rename the preserved original,
+change the semantic title, or change the stable record ID.
 
 ## Repository Paths
 

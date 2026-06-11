@@ -53,6 +53,7 @@ def test_view_export_is_idempotent_and_prunes_only_managed_files(tmp_path: Path)
         record_id="identity/document",
         title="Document",
         view_name="Document",
+        view_access="archive",
         domain="identity",
         owner="self",
         lifecycle="replaceable",
@@ -89,9 +90,9 @@ def test_view_export_is_idempotent_and_prunes_only_managed_files(tmp_path: Path)
 
     assert first["changed"] > 0
     assert second["changed"] == 0
-    assert (destination / "Identity/Document.txt").read_text() == "current"
+    assert (destination / "Archive/Identity/Document.txt").read_text() == "current"
     metadata = json.loads(
-        (destination / ".metadata/Identity/Document.json").read_text()
+        (destination / ".metadata/Archive/Identity/Document.json").read_text()
     )
     assert metadata["id"] == "identity/document"
 
@@ -116,7 +117,7 @@ def test_view_export_is_idempotent_and_prunes_only_managed_files(tmp_path: Path)
         cipher=cipher,
         prune=False,
     )
-    assert (destination / "Identity/Document.txt").exists()
+    assert (destination / "Archive/Identity/Document.txt").exists()
 
     result = export_view_to_folder(
         vault=vault,
@@ -143,6 +144,7 @@ def test_view_export_rejects_symlink_redirect_outside_destination(tmp_path: Path
         record_id="identity/document",
         title="Document",
         view_name="Document",
+        view_access="archive",
         domain="identity",
         owner="self",
         lifecycle="replaceable",
@@ -164,7 +166,7 @@ def test_view_export_rejects_symlink_redirect_outside_destination(tmp_path: Path
         check=True,
     )
     destination.mkdir()
-    (destination / "Identity").symlink_to(outside, target_is_directory=True)
+    (destination / "Archive").symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(FolderExchangeError, match="escapes destination"):
         export_view_to_folder(
@@ -188,6 +190,7 @@ def test_refresh_views_materializes_one_commit_to_all_targets(tmp_path: Path):
         record_id="identity/document",
         title="Document",
         view_name="Document",
+        view_access="archive",
         domain="identity",
         owner="self",
         lifecycle="replaceable",
@@ -239,9 +242,9 @@ def test_refresh_views_materializes_one_commit_to_all_targets(tmp_path: Path):
         manifest = json.loads((target.path / ".pdocs-folder-export.json").read_text())
         assert manifest["schema"] == 2
         assert manifest["commit"] == commit
-        assert (target.path / "Identity/Document.txt").read_text() == "current"
+        assert (target.path / "Archive/Identity/Document.txt").read_text() == "current"
 
-    missing = targets["local"].path / "Identity/Document.txt"
+    missing = targets["local"].path / "Archive/Identity/Document.txt"
     missing.unlink()
     repaired = refresh_views(vault=vault, targets=targets, cipher=cipher)
     by_name = {item["name"]: item for item in repaired}

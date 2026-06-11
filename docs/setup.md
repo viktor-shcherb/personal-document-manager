@@ -303,6 +303,7 @@ pdocs record add \
   --id "employment/example/correspondence/2026-06-10-offer" \
   --title "Employment offer" \
   --view-name "Example employer offer acceptance" \
+  --view-access archive \
   --domain employment \
   --owner self \
   --lifecycle event \
@@ -333,15 +334,15 @@ The agent checks the local committed `HEAD` at the configured interval and
 skips work when every destination is current. Unrelated files are always
 preserved. See [folder-exchange.md](folder-exchange.md).
 
-Readable documents use descriptive titles under a small set of domain folders.
-Issue dates remain in hidden metadata and `INDEX.json` unless needed to
-distinguish recurring documents. Improve a downstream name or folder
-persistently with:
+Frequently reused documents appear directly at the view root. Records retained
+mainly as historical evidence appear under `Archive/<domain>`. Issue dates
+remain in hidden metadata and `INDEX.json` unless needed to distinguish
+recurring documents. Improve placement persistently with:
 
 ```bash
 pdocs record organize RECORD_ID \
   --name "More descriptive filename" \
-  --folder "Employment"
+  --access frequent
 ```
 
 Commit the changed encrypted record; automatic refresh then renames it in every

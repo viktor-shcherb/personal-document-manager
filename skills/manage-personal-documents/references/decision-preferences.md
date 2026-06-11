@@ -72,9 +72,9 @@ pdocs preference remember organization \
 ```
 
 Organization preferences may cover domain, owner, lifecycle, ID prefix, and
-free-form grouping guidance. They control stable semantic organization in the
-encrypted vault. The readable projection defaults to one descriptive folder
-per domain and descriptive filenames derived from record titles.
+free-form grouping guidance. Readable presentation is separate: frequently
+reused records appear directly at the view root, while historical or
+just-in-case evidence belongs under `Archive/<domain>`.
 
 Store issue dates in metadata unless a date or period is part of the document's
 identity. If a better readable name or placement is discovered later, use
@@ -82,9 +82,8 @@ identity. If a better readable name or placement is discovered later, use
 generated view files because refresh will replace unmanaged presentation
 changes.
 
-Readable folders should be flat by default. Use nested folders for a coherent
-property, legal case, or similar dossier only when the grouping materially
-improves retrieval.
+Frequent records must not be hidden in folders. Use nested folders only inside
+Archive for a coherent property, legal case, or similar dossier.
 
 ## Scope And Conflicts
 

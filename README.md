@@ -76,10 +76,11 @@ automatically.
 Encrypted records remain canonical, while configured view destinations contain
 the same readable projection of the latest committed versions for normal use.
 Destinations can include a local folder, iCloud Drive, or another synchronized
-folder. The view uses a small set of descriptive domain folders and readable
-filenames chosen explicitly by the importing agent; dates stay in metadata
-unless they identify a recurring document. Agents can persist later naming
-improvements with `pdocs record organize`.
+folder. Filenames are chosen explicitly by the importing agent. Frequently
+reused documents appear directly at the view root; rarely accessed evidence
+lives under descriptive folders within `Archive`. Dates stay in metadata
+unless they identify a recurring document. Agents can persist later
+presentation improvements with `pdocs record organize`.
 
 ### Recover after loss
 
