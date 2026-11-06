@@ -150,3 +150,42 @@ def test_execute_retries_rate_limits(monkeypatch: pytest.MonkeyPatch):
     assert GmailSource._execute(request) == {"ok": True}
     assert request.calls == 2
     assert sleeps == [1.5]
+
+
+def test_execute_retries_gmail_quota_error(monkeypatch: pytest.MonkeyPatch):
+    class QuotaError(RuntimeError):
+        resp = SimpleNamespace(status=403)
+        error_details = [{"reason": "rateLimitExceeded"}]
+
+    class FlakyRequest:
+        def __init__(self):
+            self.calls = 0
+
+        def execute(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise QuotaError
+            return {"ok": True}
+
+    request = FlakyRequest()
+    sleeps = []
+    monkeypatch.setattr("pdocs.gmail.time.sleep", sleeps.append)
+
+    assert GmailSource._execute(request) == {"ok": True}
+    assert request.calls == 2
+    assert sleeps == [5]
+
+
+def test_export_reuses_existing_complete_message(tmp_path):
+    destination = tmp_path / "email" / "message-1"
+    destination.mkdir(parents=True)
+    (destination / "message.eml").write_text("original message")
+    (destination / "source.json").write_text('{"source_profile": "correspondence"}')
+    gmail = GmailSource(
+        SimpleNamespace(paths=SimpleNamespace(inbox=tmp_path)),
+        ExistingSecrets(),
+    )
+    gmail._raw_response = lambda _: pytest.fail("Existing message was downloaded")
+
+    assert gmail.export("message-1") == destination
+    assert "correspondence" in (destination / "source.json").read_text()

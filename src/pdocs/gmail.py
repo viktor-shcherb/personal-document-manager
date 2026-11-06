@@ -15,6 +15,7 @@ from .interfaces import SecretStore, SourceCandidate
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 RETRYABLE_STATUS_CODES = {429, 500, 503}
+RETRYABLE_FORBIDDEN_REASONS = {"rateLimitExceeded", "userRateLimitExceeded"}
 
 
 class GmailError(RuntimeError):
@@ -113,9 +114,18 @@ class GmailSource:
                 return request.execute()
             except Exception as error:
                 status = getattr(getattr(error, "resp", None), "status", None)
-                if status not in RETRYABLE_STATUS_CODES or attempt == attempts - 1:
+                details = getattr(error, "error_details", None) or []
+                rate_limited = status == 403 and any(
+                    isinstance(detail, dict)
+                    and detail.get("reason") in RETRYABLE_FORBIDDEN_REASONS
+                    for detail in details
+                )
+                if (
+                    status not in RETRYABLE_STATUS_CODES
+                    and not rate_limited
+                ) or attempt == attempts - 1:
                     raise
-                time.sleep(1.5 * (attempt + 1))
+                time.sleep(min(5 * 2**attempt, 60) if rate_limited else 1.5 * (attempt + 1))
         raise AssertionError("unreachable")
 
     @staticmethod
@@ -237,9 +247,14 @@ class GmailSource:
         return [self.inspect(message["id"]) for message in thread.get("messages", [])]
 
     def export(self, message_id: str) -> Path:
+        destination = self.config.paths.inbox / "email" / message_id
+        if (destination / "message.eml").is_file() and (
+            destination / "source.json"
+        ).is_file():
+            return destination
+
         response, raw = self._raw_response(message_id)
         message = BytesParser(policy=policy.default).parsebytes(raw)
-        destination = self.config.paths.inbox / "email" / message_id
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "message.eml").write_bytes(raw)
 
